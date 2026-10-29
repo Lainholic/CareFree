@@ -25,6 +25,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 LEDGER_LOCK = threading.RLock()
 CAREGIVER_TOKENS = {}      # bearer token -> invoice_id mapping
 ACTIVE_INVOICE_ORDERS = {} # invoice_id -> {"order_id", "amount", "mode", "created_time"}
+PROCESSED_CAPTURE_IDS = set() # Immutable set of completed capture IDs to prevent re-processing
 
 def to_money(val):
     """Accurate decimal quantization for healthcare billing invariants."""
@@ -224,7 +225,7 @@ def create_paypal_order(amount, currency="USD", invoice_id="", payment_mode="ful
     }
 
 
-def capture_paypal_order(order_id, amount=0.0):
+def capture_paypal_order(order_id):
     token = get_paypal_token()
     if token:
         try:
@@ -256,19 +257,42 @@ def capture_paypal_order(order_id, amount=0.0):
 
                 cap = captures[0]
                 cap_id = cap.get("id")
-                if not cap_id:
+                cap_status = cap.get("status")
+                if not cap_id or cap_status != "COMPLETED":
+                    return {
+                        "success": False,
+                        "order_id": order_id,
+                        "status": cap_status or "FAILED",
+                        "error": "Capture status not COMPLETED or missing capture ID",
+                        "raw_capture": res_data
+                    }
+
+                # Authoritative capture amount and currency straight from gateway
+                try:
+                    captured_amount = float(cap.get("amount", {}).get("value", 0.0))
+                except (ValueError, TypeError):
+                    captured_amount = 0.0
+                captured_currency = str(cap.get("amount", {}).get("currency_code", "USD")).strip()
+
+                if captured_amount <= 0.0:
                     return {
                         "success": False,
                         "order_id": order_id,
                         "status": "FAILED",
-                        "error": "No capture ID returned by PayPal Orders v2",
+                        "error": "Invalid zero or negative capture amount from gateway",
                         "raw_capture": res_data
                     }
 
-                captured_amount = float(cap.get("amount", {}).get("value", amount))
-
                 # Update authoritative invoice ledger state with Mutex Lock
                 with LEDGER_LOCK:
+                    if cap_id in PROCESSED_CAPTURE_IDS:
+                        return {
+                            "success": False,
+                            "order_id": order_id,
+                            "status": "REPLAY_BLOCKED",
+                            "error": f"Capture ID {cap_id} has already been recorded in ledger. Replay blocked."
+                        }
+
                     order_meta = ORDER_TO_INVOICE.get(order_id, {})
                     invoice_id = order_meta.get("invoice_id")
                     payment_mode = order_meta.get("payment_mode", "full")
@@ -276,6 +300,17 @@ def capture_paypal_order(order_id, amount=0.0):
 
                     if invoice_id and invoice_id in INVOICE_STORE:
                         inv = INVOICE_STORE[invoice_id]
+
+                        # Currency invariant check
+                        inv_currency = str(inv.get("currency", "USD")).strip()
+                        if captured_currency != inv_currency:
+                            return {
+                                "success": False,
+                                "order_id": order_id,
+                                "status": "CURRENCY_MISMATCH",
+                                "error": f"Captured currency {captured_currency} does not match invoice currency {inv_currency}"
+                            }
+
                         # Double capture guard: if already settled, reject replay
                         if inv.get("status") in ("PAID_IN_FULL", "SETTLED_FULL") and float(inv.get("remaining_patient_due", 0.0)) <= 0.01:
                             return {
@@ -307,6 +342,16 @@ def capture_paypal_order(order_id, amount=0.0):
                             inv["remaining_patient_due"] = 0.0
                             inv["verified_due"] = 0.0
 
+                        # Record immutable capture event audit trail
+                        inv.setdefault("captures", []).append({
+                            "capture_id": cap_id,
+                            "order_id": order_id,
+                            "amount": to_money(captured_amount),
+                            "currency": captured_currency,
+                            "payment_mode": payment_mode,
+                            "captured_at": time.strftime("%Y-%m-%d %H:%M:%S")
+                        })
+                        PROCESSED_CAPTURE_IDS.add(cap_id)
                         inv["last_capture_id"] = cap_id
                         inv["paid_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
                         ACTIVE_INVOICE_ORDERS.pop(invoice_id, None)
@@ -341,11 +386,16 @@ def capture_paypal_order(order_id, amount=0.0):
 
 class CarePayHandler(http.server.SimpleHTTPRequestHandler):
     def end_headers(self):
-        self.send_header("Access-Control-Allow-Origin", "*")
+        origin = self.headers.get("Origin", "")
+        if origin and (origin.startswith("http://127.0.0.1") or origin.startswith("http://localhost")):
+            self.send_header("Access-Control-Allow-Origin", origin)
+        else:
+            self.send_header("Access-Control-Allow-Origin", f"http://{HOST}:{PORT}")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
         self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
         self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
         super().end_headers()
 
     def do_OPTIONS(self):
@@ -754,12 +804,11 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
             self.send_json({"success": False, "error": "Invalid request body: object expected"}, status=400)
             return
         order_id = str(body.get("order_id", "")).strip()
-        try:
-            amount = float(body.get("amount", 0.0))
-        except (ValueError, TypeError):
-            amount = 0.0
+        if not order_id:
+            self.send_json({"success": False, "error": "Missing order_id in capture payload"}, status=400)
+            return
 
-        result = capture_paypal_order(order_id, amount)
+        result = capture_paypal_order(order_id)
         self.send_json(result)
 
     def handle_caregiver_link(self, body):
