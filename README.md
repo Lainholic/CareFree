@@ -1,6 +1,7 @@
 # 🛡️ PainFree CarePay AI
 > **Surprise Medical Bill Vision Intelligence with PayPal Pay in 4 & Family Caregiver Checkout**  
-> *Devpost Official Submission for the PayPal AI Hackathon 2026*
+> *Devpost Official Submission for the PayPal AI Hackathon 2026*  
+> 📺 **Official Demo Video**: [Watch Live Demo on YouTube (2m 18s)](https://youtu.be/26lQsW1gghE)
 
 ---
 
