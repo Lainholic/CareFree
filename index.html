@@ -804,6 +804,8 @@
       cursor: pointer;
     }
   </style>
+  <!-- PayPal JS SDK (Official Sandbox Integration with Pay in 4) -->
+  <script src="https://www.paypal.com/sdk/js?client-id=test&currency=USD&components=buttons,messages&enable-funding=paylater"></script>
 </head>
 <body>
   <div class="ambient-bg"></div>
@@ -997,11 +999,14 @@
 
           <!-- PayPal Smart Payment Button Card -->
           <div class="paypal-btn-area">
-            <button class="pp-custom-button" onclick="triggerPayPalCheckout()">
-              <span style="font-size: 18px;">💳</span> Pay with <strong>PayPal</strong>
+            <!-- Official PayPal Smart Buttons SDK Container -->
+            <div id="paypal-button-container" style="min-height: 45px; margin-bottom: 10px;"></div>
+
+            <button class="pp-custom-button" id="fallbackPayBtn" onclick="triggerPayPalCheckout()">
+              <span style="font-size: 18px;">💳</span> Instant Sandbox Pay in 4 Test
             </button>
             <div class="sandbox-tag">
-              <span>🔒 256-Bit Encrypted</span> • <span>PayPal Sandbox Mode</span>
+              <span>🔒 Official PayPal SDK Active</span> • <span>Sandbox Direct</span>
             </div>
           </div>
 
@@ -1209,6 +1214,69 @@
     function closeModal() {
       document.getElementById('successModal').style.display = 'none';
     }
+
+    function initPayPalSdk() {
+      const container = document.getElementById('paypal-button-container');
+      if (typeof paypal !== 'undefined' && paypal.Buttons) {
+        container.innerHTML = '';
+        paypal.Buttons({
+          style: {
+            layout: 'vertical',
+            color: 'gold',
+            shape: 'pill',
+            label: 'paypal'
+          },
+          createOrder: function(data, actions) {
+            const due = currentInvoice.pay_in_4_installment || (currentInvoice.patient_due / 4) || 45.00;
+            return actions.order.create({
+              purchase_units: [{
+                amount: {
+                  value: due.toFixed(2)
+                },
+                description: "PainFree CarePay: " + (currentInvoice.facility || "Medical Bill")
+              }]
+            });
+          },
+          onApprove: function(data, actions) {
+            return actions.order.capture().then(function(details) {
+              document.getElementById('modalTitle').textContent = "PayPal Payment Approved!";
+              document.getElementById('modalDesc').textContent = "Medical bill payment successfully captured via PayPal Sandbox.";
+              document.getElementById('modalTxId').textContent = details.id || "PP-" + Math.random().toString(36).substr(2, 9).toUpperCase();
+              document.getElementById('modalPaid').textContent = `$${(currentInvoice.pay_in_4_installment || 45).toFixed(2)}`;
+              document.getElementById('modalProvider').textContent = currentInvoice.facility;
+              document.getElementById('modalTime').textContent = new Date().toLocaleString();
+              document.getElementById('successModal').style.display = 'flex';
+            });
+          }
+        }).render('#paypal-button-container').catch(err => {
+          console.warn("PayPal Smart Buttons render note:", err);
+        });
+      }
+    }
+
+    // Check URL parameters for Caregiver Mode
+    window.addEventListener('DOMContentLoaded', () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const inv = urlParams.get('invoice');
+      const mode = urlParams.get('mode');
+
+      if (inv) {
+        fetch('/api/invoice/' + inv)
+          .then(res => res.json())
+          .then(res => {
+            if (res.success && res.invoice) {
+              renderBillData(res.invoice);
+              if (mode === 'caregiver') {
+                alert(`👨‍👩‍👧 Caregiver Payment Request Mode Activated!\n\nYou are viewing the medical bill for ${res.invoice.patient_name || 'your family member'}. You can review the itemized charges and pay directly via PayPal.`);
+              }
+            }
+          })
+          .catch(e => console.error(e));
+      }
+
+      // Initialize PayPal SDK buttons
+      setTimeout(initPayPalSdk, 800);
+    });
   </script>
 </body>
 </html>
