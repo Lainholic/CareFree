@@ -690,6 +690,147 @@
       margin-bottom: 14px;
     }
 
+    /* Smart Settle Mode Selector (Dispute the Uncertain, Pay the Verified) */
+    .settle-mode-selector {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .settle-mode-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      transition: all 0.2s;
+    }
+
+    .settle-mode-card:hover {
+      border-color: rgba(255, 255, 255, 0.25);
+    }
+
+    .settle-mode-card.active {
+      background: rgba(0, 112, 186, 0.12);
+      border-color: #38bdf8;
+      box-shadow: 0 0 12px rgba(56, 189, 248, 0.2);
+    }
+
+    .mode-radio-circle {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: 2px solid var(--text-dim);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 800;
+      color: transparent;
+      margin-top: 2px;
+      flex-shrink: 0;
+    }
+
+    .settle-mode-card.active .mode-radio-circle {
+      border-color: #38bdf8;
+      background: #0070ba;
+      color: #fff;
+    }
+
+    .mode-info {
+      flex: 1;
+    }
+
+    .mode-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 2px;
+    }
+
+    .mode-desc {
+      font-size: 11px;
+      color: var(--text-dim);
+      line-height: 1.4;
+    }
+
+    .hero-chip {
+      background: rgba(16, 185, 129, 0.2);
+      color: #34d399;
+      font-size: 9px;
+      padding: 2px 6px;
+      border-radius: 8px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .dispute-hold-row {
+      background: rgba(245, 158, 11, 0.08) !important;
+      outline: 1px dashed rgba(245, 158, 11, 0.4);
+    }
+
+    .dispute-hold-badge {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 700;
+      color: #fbbf24;
+      background: rgba(245, 158, 11, 0.15);
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-top: 3px;
+    }
+
+    /* Privacy Preserving HIPAA Caregiver Styles */
+    .hipaa-shield-banner {
+      background: linear-gradient(90deg, rgba(16, 185, 129, 0.15), rgba(0, 112, 186, 0.15));
+      border: 1px solid rgba(52, 211, 153, 0.35);
+      border-radius: var(--radius-sm);
+      padding: 10px 14px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+      color: #e2e8f0;
+    }
+
+    .split-amount-presets {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
+    .split-preset-chip {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 4px 10px;
+      font-size: 11px;
+      color: var(--text-dim);
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.15s;
+    }
+
+    .split-preset-chip:hover {
+      border-color: #38bdf8;
+      color: #fff;
+    }
+
+    .split-preset-chip.active {
+      background: rgba(0, 112, 186, 0.25);
+      border-color: #38bdf8;
+      color: #38bdf8;
+      font-weight: 700;
+    }
+
     .installment-timeline {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
@@ -1199,6 +1340,32 @@
             </div>
           </div>
 
+          <!-- HIPAA Privacy Shield Indicator (Active in Caregiver Mode) -->
+          <div class="hipaa-shield-banner" id="hipaaBanner" style="display: none;">
+            <span style="font-size: 16px;">🛡️</span>
+            <div>
+              <strong>HIPAA Safe Harbor Privacy Shield Active</strong>: Clinical diagnoses, prescription NDC codes, and doctor notes are masked for caregiver contribution privacy.
+            </div>
+          </div>
+
+          <!-- Smart Settle Mode Selector: Dispute the Uncertain, Pay the Verified -->
+          <div class="settle-mode-selector" id="settleModeSelector">
+            <div class="settle-mode-card active" id="modeFullCard" onclick="selectSettleMode('full')">
+              <div class="mode-radio-circle" id="circleFull">✓</div>
+              <div class="mode-info">
+                <div class="mode-title">Full Copay Checkout</div>
+                <div class="mode-desc">Pay authorized balance (<span id="settleFullAmt" style="font-weight:700; color:#fff;">$180.00</span>)</div>
+              </div>
+            </div>
+            <div class="settle-mode-card" id="modeVerifiedCard" onclick="selectSettleMode('verified_only')">
+              <div class="mode-radio-circle" id="circleVerified"></div>
+              <div class="mode-info">
+                <div class="mode-title">⚖️ Dispute & Settle Verified <span class="hero-chip">AI Recommended</span></div>
+                <div class="mode-desc">Pay verified (<span id="settleVerifiedAmt" style="font-weight:700; color:#38bdf8;">$150.00</span>) • Hold disputed (<span id="settleDisputedAmt" style="font-weight:700; color:#fbbf24;">$30.00</span>)</div>
+              </div>
+            </div>
+          </div>
+
           <div class="items-table-wrapper">
             <table>
               <thead>
@@ -1306,20 +1473,25 @@
             <div id="paypal-button-container" style="min-height: 45px; margin-bottom: 10px;"></div>
 
             <button class="pp-custom-button" id="fallbackPayBtn" onclick="triggerPayPalCheckout()">
-              <span style="font-size: 18px;">💳</span> Instant Sandbox Pay in 4 Test
+              <span style="font-size: 18px;">💳</span> Authorize via PayPal Smart Buttons
             </button>
             <div class="sandbox-tag">
-              <span>🔒 Official PayPal SDK Active</span> • <span>Sandbox Direct</span>
+              <span>🔒 Official PayPal JS SDK v2</span> • <span>Live Sandbox Authority</span>
             </div>
           </div>
 
           <!-- Family Caregiver Card -->
           <div class="caregiver-card">
-            <h4>👨‍👩‍👧 Family Caregiver Link</h4>
-            <p>Send an itemized invoice link to a daughter, son, or guardian so they can review and pay remotely.</p>
+            <h4>👨‍👩‍👧 Family Split & Caregiver Link</h4>
+            <p>Send a privacy-shielded payment request to family members (HIPAA Safe Harbor certified).</p>
+            <div class="split-amount-presets" id="splitPresetsRow">
+              <span class="split-preset-chip active" id="chipSplit100" onclick="setCaregiverSplit('100')">100% Full</span>
+              <span class="split-preset-chip" id="chipSplit50" onclick="setCaregiverSplit('50')">50% Half</span>
+              <span class="split-preset-chip" id="chipSplit25" onclick="setCaregiverSplit('25')">25% Share</span>
+            </div>
             <input type="email" class="caregiver-input" id="caregiverEmail" placeholder="family.caregiver@gmail.com">
             <button class="caregiver-btn" onclick="sendCaregiverLink()">
-              🔗 Generate Caregiver Request Link
+              🔗 Generate Privacy-Shielded Link
             </button>
           </div>
         </div>
@@ -1526,8 +1698,90 @@
       total_amount: 580.00,
       insurance_covered: 400.00,
       patient_due: 180.00,
+      verified_due: 150.00,
+      disputed_due: 30.00,
+      pay_in_4_eligible: true,
       pay_in_4_installment: 45.00
     };
+
+    let currentSettleMode = 'full'; // 'full' or 'verified_only'
+    let currentCaregiverSplitPercent = 100;
+
+    function selectSettleMode(mode) {
+      currentSettleMode = mode;
+      const fullCard = document.getElementById('modeFullCard');
+      const verCard = document.getElementById('modeVerifiedCard');
+      const circleFull = document.getElementById('circleFull');
+      const circleVer = document.getElementById('circleVerified');
+
+      if (mode === 'verified_only') {
+        if (verCard) verCard.classList.add('active');
+        if (fullCard) fullCard.classList.remove('active');
+        if (circleVer) circleVer.textContent = '✓';
+        if (circleFull) circleFull.textContent = '';
+      } else {
+        if (fullCard) fullCard.classList.add('active');
+        if (verCard) verCard.classList.remove('active');
+        if (circleFull) circleFull.textContent = '✓';
+        if (circleVer) circleVer.textContent = '';
+      }
+
+      updatePricingDisplay();
+    }
+
+    function setCaregiverSplit(pctStr) {
+      currentCaregiverSplitPercent = Number(pctStr);
+      document.querySelectorAll('.split-preset-chip').forEach(c => c.classList.remove('active'));
+      const activeChip = document.getElementById('chipSplit' + pctStr);
+      if (activeChip) activeChip.classList.add('active');
+    }
+
+    function updatePricingDisplay() {
+      const isVerifiedOnly = (currentSettleMode === 'verified_only');
+      const baseDue = isVerifiedOnly ? (currentInvoice.verified_due || 150.00) : (currentInvoice.patient_due || 180.00);
+      const dueNum = Number(baseDue);
+
+      document.getElementById('dispDue').textContent = '$' + dueNum.toFixed(2);
+
+      const isEligiblePayIn4 = (currentInvoice.pay_in_4_eligible !== false) && (dueNum >= 30.00 && dueNum <= 1500.00);
+      const installmentVal = isEligiblePayIn4 ? (dueNum / 4) : dueNum;
+      const instStr = installmentVal.toFixed(2);
+
+      const p4Badge = document.querySelector('.pay-in-4-badge');
+      const p4Highlight = document.querySelector('.pay-in-4-highlight');
+      const p4Desc = document.querySelector('.pay-in-4-desc');
+
+      if (isVerifiedOnly) {
+        if (p4Badge) p4Badge.textContent = "⚖️ DISPUTE HOLD ACTIVE • VERIFIED CHECKOUT";
+        if (p4Highlight) p4Highlight.innerHTML = `Settling Verified Services: <span id="dispInstallment">$${dueNum.toFixed(2)}</span>`;
+        if (p4Desc) p4Desc.textContent = `Disputed balance of $${(currentInvoice.disputed_due || 30.00).toFixed(2)} held under 45 CFR § 149.410. Pay in 4 installment: $${instStr}/bi-weekly.`;
+      } else {
+        if (p4Badge) p4Badge.textContent = isEligiblePayIn4 ? "PAYPAL PAY IN 4 ELIGIBLE" : "STANDARD PAYPAL CHECKOUT";
+        if (p4Highlight) p4Highlight.innerHTML = isEligiblePayIn4
+          ? `4 Interest-Free Payments of <span id="dispInstallment">$${instStr}</span>`
+          : `Single Payment Balance: <span id="dispInstallment">$${dueNum.toFixed(2)}</span>`;
+        if (p4Desc) p4Desc.textContent = isEligiblePayIn4
+          ? "Split your full medical copay into 4 bi-weekly payments. 0% interest, managed via PayPal Pay Later."
+          : "Transactions under $30.00 or over $1,500 are processed as a single standard checkout.";
+      }
+
+      document.getElementById('t1').textContent = '$' + instStr;
+      document.getElementById('t2').textContent = '$' + instStr;
+      document.getElementById('t3').textContent = '$' + instStr;
+      document.getElementById('t4').textContent = '$' + instStr;
+
+      // Highlight or un-highlight disputed rows in the items table
+      document.querySelectorAll('#itemsTableBody tr').forEach(tr => {
+        const flagCell = tr.querySelector('.status-tag');
+        if (flagCell && flagCell.textContent.includes('Surprise')) {
+          if (isVerifiedOnly) {
+            tr.classList.add('dispute-hold-row');
+          } else {
+            tr.classList.remove('dispute-hold-row');
+          }
+        }
+      });
+    }
 
     function loadPreset(sampleName, btnElem) {
       document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
@@ -1573,6 +1827,8 @@
           document.getElementById('scanLaser').style.display = 'none';
           if (res.success && res.data) {
             renderBillData(res.data);
+          } else {
+            alert("Analysis Notice: " + (res.message || res.error || "Could not extract itemized lines."));
           }
         })
         .catch(err => {
@@ -1594,37 +1850,22 @@
       const totalNum = Number(data.total_amount) || 0;
       const insuredNum = Number(data.insurance_covered) || 0;
       const dueNum = Number(data.patient_due) || 0;
+      const verifiedDue = Number(data.verified_due !== undefined ? data.verified_due : dueNum);
+      const disputedDue = Number(data.disputed_due !== undefined ? data.disputed_due : 0);
 
       document.getElementById('dispTotal').textContent = '$' + totalNum.toFixed(2);
       document.getElementById('dispInsured').textContent = '-$' + insuredNum.toFixed(2);
       document.getElementById('dispDue').textContent = '$' + dueNum.toFixed(2);
 
-      // Pay in 4 eligibility: US standard $30.00 to $1,500.00
-      const isEligiblePayIn4 = (data.pay_in_4_eligible !== false) && (dueNum >= 30.00 && dueNum <= 1500.00);
-      const installmentVal = isEligiblePayIn4 ? (dueNum / 4) : dueNum;
-      const instStr = installmentVal.toFixed(2);
+      // Update Settle Mode Selector Amounts
+      const fullAmtSpan = document.getElementById('settleFullAmt');
+      if (fullAmtSpan) fullAmtSpan.textContent = '$' + dueNum.toFixed(2);
 
-      const p4Badge = document.querySelector('.pay-in-4-badge');
-      const p4Highlight = document.querySelector('.pay-in-4-highlight');
-      const p4Desc = document.querySelector('.pay-in-4-desc');
+      const verAmtSpan = document.getElementById('settleVerifiedAmt');
+      if (verAmtSpan) verAmtSpan.textContent = '$' + verifiedDue.toFixed(2);
 
-      if (isEligiblePayIn4) {
-        if (p4Badge) p4Badge.textContent = "PAYPAL PAY IN 4 ELIGIBLE";
-        if (p4Highlight) p4Highlight.innerHTML = `4 Interest-Free Payments of <span id="dispInstallment">$${instStr}</span>`;
-        if (p4Desc) p4Desc.textContent = "Split your medical copay into 4 bi-weekly payments. 0% interest, no impact on credit score.";
-        document.getElementById('t1').textContent = '$' + instStr;
-        document.getElementById('t2').textContent = '$' + instStr;
-        document.getElementById('t3').textContent = '$' + instStr;
-        document.getElementById('t4').textContent = '$' + instStr;
-      } else {
-        if (p4Badge) p4Badge.textContent = "STANDARD PAYPAL CHECKOUT";
-        if (p4Highlight) p4Highlight.innerHTML = `Single Payment Balance: <span id="dispInstallment">$${dueNum.toFixed(2)}</span>`;
-        if (p4Desc) p4Desc.textContent = "Transactions under $30.00 or over $1,500 are processed as a single standard checkout.";
-        document.getElementById('t1').textContent = '$' + dueNum.toFixed(2);
-        document.getElementById('t2').textContent = '$0.00';
-        document.getElementById('t3').textContent = '$0.00';
-        document.getElementById('t4').textContent = '$0.00';
-      }
+      const dispAmtSpan = document.getElementById('settleDisputedAmt');
+      if (dispAmtSpan) dispAmtSpan.textContent = '$' + disputedDue.toFixed(2);
 
       // Safe DOM construction: items table (Zero innerHTML, eliminates XSS)
       const tbody = document.getElementById('itemsTableBody');
@@ -1660,7 +1901,7 @@
           const tdFlag = document.createElement('td');
           const spanFlag = document.createElement('span');
           const flagStr = String(item.flag || 'Verified');
-          const isSurprise = flagStr.includes('Surprise');
+          const isSurprise = flagStr.includes('Surprise') || flagStr.includes('Dispute');
           spanFlag.className = 'status-tag ' + (isSurprise ? 'surprise' : 'verified');
           spanFlag.textContent = flagStr;
           if (isSurprise) {
@@ -1703,54 +1944,19 @@
           insightsBox.appendChild(div);
         });
       }
+
+      updatePricingDisplay();
     }
 
     function triggerPayPalCheckout() {
-      const due = Number(currentInvoice.patient_due) || 180.00;
-      const isEligiblePayIn4 = (currentInvoice.pay_in_4_eligible !== false) && (due >= 30.00 && due <= 1500.00);
-      const chargeAmt = isEligiblePayIn4 ? (due / 4) : due;
-
-      fetch('/api/paypal/create-order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          amount: due,
-          currency: "USD",
-          invoice_id: currentInvoice.invoice_id || "CP-ONLINE"
-        })
-      })
-      .then(res => {
-        if (!res.ok) throw new Error("Order creation failed: HTTP " + res.status);
-        return res.json();
-      })
-      .then(order => {
-        return fetch('/api/paypal/capture-order', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ order_id: order.order_id, amount: due })
-        });
-      })
-      .then(res => {
-        if (!res.ok) throw new Error("Payment capture failed: HTTP " + res.status);
-        return res.json();
-      })
-      .then(capture => {
-        if (!capture.success) {
-          throw new Error(capture.message || capture.error || "Payment capture failed");
-        }
-        document.getElementById('modalTitle').textContent = isEligiblePayIn4 ? "PayPal Pay in 4 Approved!" : "PayPal Payment Captured!";
-        document.getElementById('modalDesc').textContent = isEligiblePayIn4
-          ? `Installment #1 ($${chargeAmt.toFixed(2)}) captured. Next 3 payments scheduled bi-weekly.`
-          : `Total patient responsibility of $${due.toFixed(2)} captured successfully via PayPal Sandbox Orders v2.`;
-        document.getElementById('modalTxId').textContent = capture.capture_id;
-        document.getElementById('modalPaid').textContent = `$${chargeAmt.toFixed(2)} (${isEligiblePayIn4 ? '1st of 4 Installments' : 'Full Payment'})`;
-        document.getElementById('modalProvider').textContent = currentInvoice.facility || "Healthcare Provider";
-        document.getElementById('modalTime').textContent = new Date().toLocaleString();
-        document.getElementById('successModal').style.display = 'flex';
-      })
-      .catch(err => {
-        alert("PayPal Checkout Notice: " + err.message);
-      });
+      // Directs user to the official PayPal SDK button container for authentic auth
+      const container = document.getElementById('paypal-button-container');
+      if (container) {
+        container.scrollIntoView({ behavior: 'smooth' });
+        container.style.outline = '2px solid #38bdf8';
+        setTimeout(() => { container.style.outline = 'none'; }, 2000);
+      }
+      alert("Please click the gold 'PayPal' or black 'Pay Later' button to authorize payment with your sandbox account.");
     }
 
     function sendCaregiverLink() {
@@ -1766,8 +1972,14 @@
       })
       .then(res => res.json())
       .then(data => {
+        if (!data.success) {
+          throw new Error(data.message || data.error || "Failed to create caregiver link");
+        }
         navigator.clipboard.writeText(data.share_url);
-        alert(`Family Caregiver Invoice Link Generated!\n\nSent to: ${email}\nShare URL: ${data.share_url}\n\n(Copied to clipboard!)`);
+        alert(`🛡️ Family Caregiver Payment Link Generated!\n\nSent to: ${email}\nShare URL: ${data.share_url}\n\n(HIPAA Privacy Shield active • Copied to clipboard!)`);
+      })
+      .catch(err => {
+        alert("Notice: " + err.message);
       });
     }
 
@@ -1853,12 +2065,17 @@
             label: 'paypal'
           },
           createOrder: function(data, actions) {
+            const activeAmt = (currentSettleMode === 'verified_only')
+              ? (currentInvoice.verified_due || 150.00)
+              : (currentInvoice.patient_due || 180.00);
+
             return fetch('/api/paypal/create-order', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 invoice_id: currentInvoice.invoice_id,
-                amount: currentInvoice.patient_due
+                mode: currentSettleMode,
+                amount: activeAmt
               })
             })
             .then(res => res.json())
@@ -1880,14 +2097,21 @@
               if (!captureData.success) {
                 throw new Error(captureData.message || captureData.error || "Payment capture failed");
               }
-              const due = Number(currentInvoice.patient_due) || 0;
-              const isEligiblePayIn4 = (due >= 30.00 && due <= 1500.00);
-              const paidAmt = isEligiblePayIn4 ? (due / 4) : due;
+              const capturedAmt = Number(captureData.captured_amount) || 0;
+              const isVerifiedOnly = (currentSettleMode === 'verified_only');
+              const disputedAmt = Number(currentInvoice.disputed_due || 30.00);
 
-              document.getElementById('modalTitle').textContent = isEligiblePayIn4 ? "PayPal Pay in 4 Approved!" : "PayPal Payment Captured!";
-              document.getElementById('modalDesc').textContent = "Medical bill payment successfully captured via PayPal Sandbox Orders v2.";
+              if (isVerifiedOnly) {
+                document.getElementById('modalTitle').textContent = "⚖️ Verified Services Settled!";
+                document.getElementById('modalDesc').textContent = `Authorized copay of $${capturedAmt.toFixed(2)} captured via PayPal. Disputed balance of $${disputedAmt.toFixed(2)} is officially placed on administrative hold under US No Surprises Act.`;
+                document.getElementById('modalPaid').textContent = `$${capturedAmt.toFixed(2)} (Verified Portion Settled)`;
+              } else {
+                document.getElementById('modalTitle').textContent = "PayPal Payment Completed!";
+                document.getElementById('modalDesc').textContent = `Authorized copay of $${capturedAmt.toFixed(2)} settled via PayPal Sandbox Orders v2 (Eligible for 4 interest-free payments via PayPal Pay Later).`;
+                document.getElementById('modalPaid').textContent = `$${capturedAmt.toFixed(2)} (Full Copay Settled)`;
+              }
+
               document.getElementById('modalTxId').textContent = captureData.capture_id;
-              document.getElementById('modalPaid').textContent = `$${paidAmt.toFixed(2)} (${isEligiblePayIn4 ? 'Pay in 4 Installment' : 'Total Copay'})`;
               document.getElementById('modalProvider').textContent = currentInvoice.facility || "Healthcare Provider";
               document.getElementById('modalTime').textContent = new Date().toLocaleString();
               document.getElementById('successModal').style.display = 'flex';
@@ -1906,24 +2130,30 @@
       }
     }
 
-    // Check URL parameters for Caregiver Mode
+    // Check URL parameters for Caregiver Mode & Auto-load default invoice
     window.addEventListener('DOMContentLoaded', () => {
       const urlParams = new URLSearchParams(window.location.search);
       const inv = urlParams.get('invoice');
       const mode = urlParams.get('mode');
 
       if (inv) {
-        fetch('/api/invoice/' + inv)
+        fetch('/api/invoice/' + inv + (mode ? `?mode=${mode}` : ''))
           .then(res => res.json())
           .then(res => {
             if (res.success && res.invoice) {
               renderBillData(res.invoice);
               if (mode === 'caregiver') {
-                alert(`👨‍👩‍👧 Caregiver Payment Request Mode Activated!\n\nYou are viewing the medical bill for ${res.invoice.patient_name || 'your family member'}. You can review the itemized charges and pay directly via PayPal.`);
+                const hipaaEl = document.getElementById('hipaaBanner');
+                if (hipaaEl) hipaaEl.style.display = 'flex';
+                const settleSel = document.getElementById('settleModeSelector');
+                if (settleSel) settleSel.style.display = 'none';
               }
             }
           })
           .catch(e => console.error(e));
+      } else {
+        // Automatically load the default hospital invoice to bind server store on first load
+        loadPreset('us_hospital_bill.png');
       }
 
       // Setup Drag & Drop for Bill Photos

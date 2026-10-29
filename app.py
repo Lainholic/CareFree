@@ -67,17 +67,20 @@ SAMPLE_BILLS = {
         "total_amount": 580.00,
         "insurance_covered": 400.00,
         "patient_due": 180.00,
+        "verified_due": 150.00,
+        "disputed_due": 30.00,
+        "status": "UNPAID",
         "pay_in_4_eligible": True,
         "pay_in_4_installment": 45.00,
         "items": [
             {"code": "CPT 99284", "desc": "Emergency Dept Visit (Level 4 Moderate Severity)", "charge": 350.00, "insured": 250.00, "due": 100.00, "flag": "In-Network Verified"},
             {"code": "CPT 71046", "desc": "Chest Radiography (X-Ray 2 Views)", "charge": 140.00, "insured": 90.00, "due": 50.00, "flag": "Fair Price Match"},
-            {"code": "CPT 96372", "desc": "Therapeutic Parenteral Injection", "charge": 90.00, "insured": 60.00, "due": 30.00, "flag": "Surprise Out-of-Network Flag (Prevented)"}
+            {"code": "CPT 96372", "desc": "Therapeutic Parenteral Injection", "charge": 90.00, "insured": 60.00, "due": 30.00, "flag": "Surprise Out-of-Network Flag (Dispute Eligible)"}
         ],
         "ai_insights": [
-            "No Surprises Act Protection: CPT 96372 was flagged as potential out-of-network provider fee, adjusted to in-network median benchmark (-$35.00 saved).",
-            "Eligible for PayPal Pay in 4: Split $180.00 into 4 interest-free bi-weekly payments of $45.00 ($30-$1,500 range).",
-            "Family Share Ready: One-click caregiver invoice link ready for remote family members."
+            "Smart Dispute & Partial Settle: CPT 96372 flagged under No Surprises Act ($30.00 hold). Verified services ($150.00) can be settled immediately.",
+            "PayPal Pay in 4 Available: Full $180.00 copay is eligible for 4 interest-free bi-weekly payments of $45.00 at PayPal checkout.",
+            "HIPAA Caregiver View: Family members can contribute toward copays with privacy-preserving diagnostic shielding."
         ]
     },
     "pharmacy_receipt_1.jpg": {
@@ -88,6 +91,9 @@ SAMPLE_BILLS = {
         "total_amount": 128.50,
         "insurance_covered": 88.50,
         "patient_due": 40.00,
+        "verified_due": 40.00,
+        "disputed_due": 0.00,
+        "status": "UNPAID",
         "pay_in_4_eligible": True,
         "pay_in_4_installment": 10.00,
         "items": [
@@ -97,14 +103,16 @@ SAMPLE_BILLS = {
         ],
         "ai_insights": [
             "Co-Pay Verification: Prescription generic co-pays verified against standard Medicare Part D tier limits.",
-            "PayPal Pay in 4: Total $40.00 qualifies for 4 interest-free payments of $10.00 every two weeks.",
+            "PayPal Pay in 4 Available: Total $40.00 qualifies for 4 interest-free payments of $10.00 every two weeks.",
             "Auto-Reorder & Renewal: Caregiver notified of upcoming 90-day refill timeline."
         ]
     }
 }
 
+ORDER_TO_INVOICE = {}
 PAYPAL_API_BASE = "https://api-m.sandbox.paypal.com" if PAYPAL_MODE == "sandbox" else "https://api-m.paypal.com"
 _cached_paypal_token = {"token": None, "expires_at": 0}
+
 
 
 def get_paypal_token():
@@ -134,7 +142,7 @@ def get_paypal_token():
         return None
 
 
-def create_paypal_order(amount, currency="USD", invoice_id=""):
+def create_paypal_order(amount, currency="USD", invoice_id="", payment_mode="full"):
     token = get_paypal_token()
     if token:
         try:
@@ -144,7 +152,7 @@ def create_paypal_order(amount, currency="USD", invoice_id=""):
                 "purchase_units": [
                     {
                         "reference_id": invoice_id,
-                        "description": f"PainFree CarePay - Medical Invoice {invoice_id}",
+                        "description": f"PainFree CarePay - Medical Invoice {invoice_id} ({payment_mode})",
                         "amount": {
                             "currency_code": currency,
                             "value": f"{amount:.2f}"
@@ -168,10 +176,21 @@ def create_paypal_order(amount, currency="USD", invoice_id=""):
             )
             with urllib.request.urlopen(req, timeout=12) as resp:
                 res_data = json.loads(resp.read().decode())
+                order_id = res_data.get("id")
+                if order_id:
+                    ORDER_TO_INVOICE[order_id] = {
+                        "invoice_id": invoice_id,
+                        "amount": amount,
+                        "currency": currency,
+                        "payment_mode": payment_mode,
+                        "created_at": time.strftime("%Y-%m-%d %H:%M:%S")
+                    }
                 return {
                     "success": True,
-                    "order_id": res_data.get("id"),
+                    "order_id": order_id,
                     "status": res_data.get("status", "CREATED"),
+                    "authorized_amount": amount,
+                    "payment_mode": payment_mode,
                     "mode": "live_paypal_sandbox",
                     "raw_order": res_data
                 }
@@ -193,7 +212,7 @@ def create_paypal_order(amount, currency="USD", invoice_id=""):
 
 def capture_paypal_order(order_id, amount=0.0):
     token = get_paypal_token()
-    if token and not order_id.startswith("PAYPAL-ORD-"):
+    if token:
         try:
             url = f"{PAYPAL_API_BASE}/v2/checkout/orders/{order_id}/capture"
             req = urllib.request.Request(
@@ -231,12 +250,46 @@ def capture_paypal_order(order_id, amount=0.0):
                         "raw_capture": res_data
                     }
 
+                captured_amount = float(cap.get("amount", {}).get("value", amount))
+
+                # Update authoritative invoice ledger state
+                order_meta = ORDER_TO_INVOICE.get(order_id, {})
+                invoice_id = order_meta.get("invoice_id")
+                payment_mode = order_meta.get("payment_mode", "full")
+                settlement_status = "SETTLED_FULL"
+
+                if invoice_id and invoice_id in INVOICE_STORE:
+                    inv = INVOICE_STORE[invoice_id]
+                    if payment_mode == "verified_only":
+                        settlement_status = "PARTIALLY_SETTLED_DISPUTE_HELD"
+                        inv["status"] = settlement_status
+                        inv["settled_portion"] = captured_amount
+                        inv["remaining_disputed_balance"] = round(float(inv.get("disputed_due", 0.0)), 2)
+                    elif payment_mode == "family_split":
+                        settlement_status = "FAMILY_CONTRIBUTION_RECORDED"
+                        prior_paid = float(inv.get("family_contributions_total", 0.0))
+                        new_total = prior_paid + captured_amount
+                        inv["family_contributions_total"] = round(new_total, 2)
+                        rem = max(0.0, float(inv.get("patient_due", 0.0)) - new_total)
+                        inv["remaining_patient_due"] = round(rem, 2)
+                        inv["status"] = "SETTLED_FULL" if rem <= 0.01 else "PARTIALLY_SETTLED"
+                    else:
+                        settlement_status = "PAID_IN_FULL"
+                        inv["status"] = settlement_status
+                        inv["remaining_patient_due"] = 0.0
+
+                    inv["last_capture_id"] = cap_id
+                    inv["paid_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+
                 return {
                     "success": True,
                     "capture_id": cap_id,
                     "order_id": order_id,
                     "status": "COMPLETED",
-                    "captured_amount": float(cap.get("amount", {}).get("value", amount)),
+                    "settlement_status": settlement_status,
+                    "invoice_id": invoice_id,
+                    "captured_amount": captured_amount,
+                    "payment_mode": payment_mode,
                     "mode": "live_paypal_sandbox",
                     "raw_capture": res_data
                 }
@@ -313,9 +366,39 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
             return
 
         if clean_path.startswith("api/invoice/"):
-            inv_id = clean_path.replace("api/invoice/", "")
+            inv_id = clean_path.replace("api/invoice/", "").split("?")[0]
+            query_params = urllib.parse.parse_qs(parsed.query)
+            is_caregiver_mode = query_params.get("mode", [""])[0] == "caregiver"
+
             if inv_id in INVOICE_STORE:
-                self.send_json({"success": True, "invoice": INVOICE_STORE[inv_id]})
+                raw_inv = INVOICE_STORE[inv_id]
+                if is_caregiver_mode:
+                    # Privacy-Preserving HIPAA Safe Harbor Masking for Family / Caregivers
+                    p_name = raw_inv.get("patient_name", "Patient")
+                    masked_name = p_name[0] + "****** " + (p_name.split()[-1][0] + "****" if len(p_name.split()) > 1 else "")
+                    
+                    masked_items = []
+                    for idx, it in enumerate(raw_inv.get("items", [])):
+                        masked_items.append({
+                            "code": f"HIPAA-PROT-0{idx+1}",
+                            "desc": "Protected Healthcare Clinical Service (Caregiver View)",
+                            "charge": it.get("charge", 0.0),
+                            "insured": it.get("insured", 0.0),
+                            "due": it.get("due", 0.0),
+                            "flag": "Caregiver Co-Pay Contribution View"
+                        })
+                    
+                    caregiver_inv = copy.deepcopy(raw_inv)
+                    caregiver_inv["patient_name"] = masked_name
+                    caregiver_inv["items"] = masked_items
+                    caregiver_inv["hipaa_privacy_mode"] = True
+                    caregiver_inv["ai_insights"] = [
+                        "🛡️ HIPAA Privacy Shield Active: Clinical diagnoses & drug identifiers masked for caregiver contribution.",
+                        "Direct PayPal Settlement: Family members can contribute to the copay safely without viewing private diagnostic records."
+                    ]
+                    self.send_json({"success": True, "invoice": caregiver_inv, "privacy_mode": True})
+                else:
+                    self.send_json({"success": True, "invoice": raw_inv, "privacy_mode": False})
             else:
                 self.send_json({"success": False, "error": "Invoice not found"}, status=404)
             return
@@ -423,26 +506,39 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
                     calc_total = 0.0
                     calc_due = 0.0
                     calc_insured = 0.0
+                    calc_verified = 0.0
+                    calc_disputed = 0.0
 
                     for idx, it in enumerate(raw_items):
                         amt = float(it.get("amount") or 0.0)
                         code = it.get("code") or f"REV-0{idx+1}00"
                         desc = it.get("name") or "Healthcare Diagnostic & Service"
                         ins_portion = float(it.get("insured") or 0.0)
-                        due_portion = float(it.get("due") or amt)
+                        raw_due = it.get("due")
+                        due_portion = float(raw_due) if raw_due is not None else amt
                         calc_total += amt
                         calc_insured += ins_portion
                         calc_due += due_portion
+
+                        flag_str = str(it.get("flag", "Verified Provider Item"))
+                        is_disputed = "Surprise" in flag_str
+                        if is_disputed:
+                            calc_disputed += due_portion
+                        else:
+                            calc_verified += due_portion
+
                         items.append({
                             "code": code,
                             "desc": desc,
                             "charge": amt,
                             "insured": ins_portion,
                             "due": due_portion,
-                            "flag": it.get("flag", "Verified Provider Item")
+                            "flag": flag_str
                         })
 
                     patient_due = max(0.0, round(calc_due, 2))
+                    verified_due = max(0.0, round(calc_verified, 2))
+                    disputed_due = max(0.0, round(calc_disputed, 2))
                     pay_in_4_eligible = (patient_due >= 30.00 and patient_due <= 1500.00)
                     installment = round(patient_due / 4, 2) if pay_in_4_eligible else patient_due
 
@@ -457,11 +553,15 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
                         "total_amount": round(calc_total, 2),
                         "insurance_covered": round(calc_insured, 2),
                         "patient_due": patient_due,
+                        "verified_due": verified_due,
+                        "disputed_due": disputed_due,
+                        "status": "UNPAID",
                         "pay_in_4_eligible": pay_in_4_eligible,
                         "pay_in_4_installment": installment,
                         "items": items,
                         "ai_insights": [
                             f"Live Vision Transcription: {len(lines)} line items parsed via NVIDIA Nemotron-3.5-Super-VL.",
+                            f"Smart Dispute & Partial Settle: Disputed out-of-network balance: ${disputed_due:.2f}, Verified balance: ${verified_due:.2f}.",
                             f"Pay in 4 Status: {'Eligible ($30-$1,500 range) - 4 bi-weekly payments of $' + str(installment) if pay_in_4_eligible else 'Single payment only (under $30 threshold)'}.",
                             "No Surprises Act: Provider itemization cross-checked against standard healthcare benchmarks."
                         ]
@@ -496,6 +596,15 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
             return
 
         record = INVOICE_STORE[invoice_id]
+        current_status = record.get("status", "UNPAID")
+        if current_status in ("PAID_IN_FULL", "SETTLED_FULL"):
+            self.send_json({
+                "success": False,
+                "error": "Invoice Already Settled",
+                "message": f"Invoice '{invoice_id}' has already been paid and settled. Replay payments are blocked."
+            }, status=400)
+            return
+
         server_due = float(record.get("patient_due", 0.0))
         currency = str(record.get("currency", "USD")).strip() or "USD"
 
@@ -507,22 +616,39 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
             }, status=400)
             return
 
-        try:
-            requested_amount = float(body.get("amount", 0.0))
-        except (ValueError, TypeError):
-            requested_amount = 0.0
+        mode = str(body.get("mode", "full")).strip().lower()
 
-        # Server-enforced amount authority:
-        # If client requested the Pay in 4 installment (within 5 cents of 1/4), and invoice is eligible, bill 1/4.
-        # Otherwise, strictly bill the exact full balance. Client cannot set arbitrary amounts.
-        pay_in_4_eligible = bool(record.get("pay_in_4_eligible", False))
-        quarter_amount = round(server_due / 4, 2)
-        if pay_in_4_eligible and abs(requested_amount - quarter_amount) < 0.05:
-            amount = quarter_amount
+        # Server-enforced amount authority based on payment mode:
+        if mode == "verified_only":
+            amount = float(record.get("verified_due", server_due))
+            if amount <= 0.0:
+                self.send_json({
+                    "success": False,
+                    "error": "No Verified Balance",
+                    "message": "All line items are currently under dispute hold. No verified copay balance is due."
+                }, status=400)
+                return
+        elif mode == "family_split":
+            try:
+                split_val = float(body.get("split_amount", 0.0))
+            except (ValueError, TypeError):
+                split_val = 0.0
+            rem_due = float(record.get("remaining_patient_due", server_due))
+            if split_val <= 0.0 or split_val > rem_due + 0.01:
+                self.send_json({
+                    "success": False,
+                    "error": "Invalid Contribution Amount",
+                    "message": f"Family split contribution must be between $1.00 and remaining balance of ${rem_due:.2f}."
+                }, status=400)
+                return
+            amount = round(split_val, 2)
         else:
+            # Default authoritative full settlement:
+            # Note: PayPal Pay Later / Pay in 4 is chosen by the buyer inside PayPal's secure checkout.
+            # The merchant order is always created for the full authorized balance.
             amount = round(server_due, 2)
 
-        result = create_paypal_order(amount, currency, invoice_id)
+        result = create_paypal_order(amount, currency, invoice_id, payment_mode=mode)
         self.send_json(result)
 
     def handle_capture_order(self, body):
@@ -562,10 +688,12 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
             "invoice_id": invoice_id,
             "share_url": share_url,
             "caregiver_email": caregiver_email,
-            "patient_due": record.get("patient_due", 180.00),
-            "pay_in_4_eligible": record.get("pay_in_4_eligible", True),
-            "pay_in_4_installment": record.get("pay_in_4_installment", 45.00),
-            "message": "Caregiver payment request generated successfully."
+            "patient_due": float(record.get("patient_due", 0.0)),
+            "remaining_patient_due": float(record.get("remaining_patient_due", record.get("patient_due", 0.0))),
+            "verified_due": float(record.get("verified_due", record.get("patient_due", 0.0))),
+            "pay_in_4_eligible": bool(record.get("pay_in_4_eligible", False)),
+            "pay_in_4_installment": float(record.get("pay_in_4_installment", 0.0)),
+            "message": "Caregiver privacy-preserving payment request generated successfully."
         })
 
     def handle_appeal_generate(self, body):
