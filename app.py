@@ -370,7 +370,12 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
                     data_url = f"data:image/jpeg;base64,{image_base64}"
 
                 # Real Step 1: Vision OCR transcription
-                lines = rp.ocr_image(NEBIUS_BASE_URL, NEBIUS_API_KEY, data_url)
+                ocr_res = rp.ocr_image(NEBIUS_BASE_URL, NEBIUS_API_KEY, data_url)
+                if isinstance(ocr_res, tuple):
+                    lines, latency_ms, used_model = ocr_res
+                else:
+                    lines = ocr_res
+                    latency_ms, used_model = 0, "NVIDIA-Nemotron-3.5-Super-VL"
 
                 if lines:
                     # Real Step 2: Deterministic Python medical parser
