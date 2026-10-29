@@ -371,6 +371,17 @@
       transform: translateY(-1px);
     }
 
+    .upload-btn.file-btn {
+      border-color: rgba(56, 189, 248, 0.5);
+      background: rgba(56, 189, 248, 0.12);
+      color: #38bdf8;
+    }
+
+    .upload-btn.file-btn:hover {
+      background: rgba(56, 189, 248, 0.25);
+      border-color: var(--accent-cyan);
+    }
+
     .upload-btn.camera-btn {
       border-color: rgba(6, 182, 212, 0.5);
       background: rgba(6, 182, 212, 0.12);
@@ -924,22 +935,27 @@
             </button>
           </div>
 
-          <div class="upload-zone" id="dropZone" onclick="document.getElementById('galleryInput').click()">
-            <div class="upload-icon">📄</div>
-            <h4>Add Medical Bill Photo</h4>
-            <p>Drag & drop image here, or choose an option below:</p>
+          <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+            <div class="upload-icon">📁</div>
+            <h4>Add Medical Bill File</h4>
+            <p>Click anywhere to select a file from your device, or choose:</p>
             <div class="upload-actions">
-              <button type="button" class="upload-btn camera-btn" onclick="event.stopPropagation(); document.getElementById('cameraInput').click()">
-                📷 Snap with Camera
+              <button type="button" class="upload-btn file-btn" onclick="event.stopPropagation(); document.getElementById('fileInput').click()">
+                📁 Choose File
               </button>
               <button type="button" class="upload-btn gallery-btn" onclick="event.stopPropagation(); document.getElementById('galleryInput').click()">
-                🖼️ Choose from Gallery
+                🖼️ Gallery
+              </button>
+              <button type="button" class="upload-btn camera-btn" onclick="event.stopPropagation(); document.getElementById('cameraInput').click()">
+                📷 Camera
               </button>
             </div>
-            <!-- Hidden Camera Input (Mobile Camera Direct) -->
-            <input type="file" id="cameraInput" accept="image/*" capture="environment" onchange="handleFileUpload(event)">
-            <!-- Hidden Gallery Input (Photo Library / Local File Picker) -->
+            <!-- Universal File Input (Any Folder / Device Storage) -->
+            <input type="file" id="fileInput" accept="image/*" onchange="handleFileUpload(event)">
+            <!-- Photo Gallery Input -->
             <input type="file" id="galleryInput" accept="image/*" onchange="handleFileUpload(event)">
+            <!-- Mobile Camera Direct Input -->
+            <input type="file" id="cameraInput" accept="image/*" capture="environment" onchange="handleFileUpload(event)">
           </div>
 
           <div class="image-preview-wrapper">
