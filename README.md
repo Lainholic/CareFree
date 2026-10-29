@@ -23,7 +23,7 @@ In the United States, over **100 million Americans struggle with medical debt**,
 ### 2. PayPal Pay in 4 Financing ($30 to $1,500 Qualification)
 - Automatic installment scheduling: Splits heavy bills into 4 bi-weekly, interest-free payments (e.g., $180 total bill &rarr; 4 payments of $45 every two weeks).
 - Dynamically validates transaction eligibility according to PayPal guidelines ($30 to $1,500 range; smaller co-pays automatically fallback to standard single checkout).
-- Zero credit score impact, clear timeline visualization, and one-click authorization via PayPal Sandbox.
+- Transparent installment terms, clear timeline visualization, and one-click authorization via PayPal Sandbox.
 
 ### 3. Family Caregiver Payment Portal (Remote Care)
 - Generates a secure, itemized web invoice link that aging patients can send to adult children or guardians via SMS or email.
@@ -32,13 +32,13 @@ In the United States, over **100 million Americans struggle with medical debt**,
 
 ---
 
-## 🏗️ Zero-PHI Server Egress Architecture
+## 🏗️ Client-Side Privacy Boundary & Zero-PHI Egress Model
 
-CarePay implements an uncompromising **Zero-PHI Server Egress** privacy boundary. Raw images, patient names, and protected health information (PHI) remain isolated on the client device. Only de-identified clinical codes (CPT/NDC) and numerical totals cross network boundaries.
+CarePay is architected around a **Client-Side Privacy Boundary & Local Sanitization** design. Personal identifiers (patient names, full diagnostic codes) remain isolated on the client side, while the microservice and PayPal Sandbox receive only de-identified clinical codes and financial transaction amounts.
 
 ```mermaid
 flowchart TD
-    subgraph Client ["Client Device / Browser (Zero-PHI Boundary)"]
+    subgraph Client ["Client Device / Browser (Privacy Boundary)"]
         A["📷 Medical Bill / Prescription"] --> B["🔒 Local Image Normalization & Canvas"]
         B --> C["🛡️ HIPAA Safe Harbor Redaction Engine"]
         C --> D["🌐 Direct PayPal JS SDK (Client-Side)"]
@@ -62,17 +62,17 @@ flowchart TD
 
 ---
 
-## 📊 Quantitative Benchmark Evaluation (Synthetic N=300)
+## 📊 Quantitative Benchmark Evaluation (Synthetic Suite N=300)
 
 Evaluated against a standardized synthetic test suite of 300 diverse US hospital statements, emergency room bills, and pharmacy receipts:
 
-| Evaluation Metric | Baseline Single-Stage OCR | CarePay Zero-PHI Multimodal Pipeline | Impact & Improvement |
+| Evaluation Metric | Baseline Single-Stage OCR | CarePay Multimodal Pipeline | Impact & Improvement |
 |---|:---:|:---:|:---:|
 | **CPT/NDC Critical Field Error Rate** | 18.4% | **0.8%** | **95.6% Error Reduction** |
-| **Total Patient Due Extraction Accuracy** | 87.2% | **99.3%** | **Zero Co-Pay Discrepancy** |
-| **Median Time-to-Action (TTA)** | 72.0s | **12.4s (p95: 18.1s)** | **5.8x Faster Workflow** |
-| **Uncertainty Fallback Rate** | 24.1% (Hallucinated) | **6.2% (Flagged for Review)** | **Zero Financial Hallucination** |
-| **Regulatory Defense Rating** | Unrated (High Risk) | **88-90 / 100 (DeepSeek Audit)** | **Compliant Safe Harbor** |
+| **Total Patient Due Extraction Accuracy** | 87.2% | **99.3%** | **High-Precision Balance Matching** |
+| **Median Time-to-Action (TTA)** | 72.0s | **12.4s (p95: 18.1s)** | **5.8x Faster Actionable Workflow** |
+| **Uncertainty Fallback Rate** | 24.1% (Hallucinated) | **6.2% (Flagged for Review)** | **Deterministic Rule-Based Verification** |
+| **Adversarial Audit Rating** | Unrated (High Risk) | **88-90 / 100 (DeepSeek Audit)** | **Rigorous Policy Defense Readiness** |
 
 ---
 

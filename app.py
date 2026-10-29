@@ -26,6 +26,7 @@ LEDGER_LOCK = threading.RLock()
 CAREGIVER_TOKENS = {}      # bearer token -> invoice_id mapping
 ACTIVE_INVOICE_ORDERS = {} # invoice_id -> {"order_id", "amount", "mode", "created_time"}
 PROCESSED_CAPTURE_IDS = set() # Immutable set of completed capture IDs to prevent re-processing
+ORDER_TO_INVOICE = {}      # PayPal order_id -> {"invoice_id", "amount", "currency", "payment_mode", "created_at"}
 
 def to_money(val):
     """Accurate decimal quantization for healthcare billing invariants."""
@@ -69,10 +70,11 @@ INVOICE_STORE = {}
 DATA_DIR = os.path.join(BASE_DIR, "_work")
 INVOICES_DB_PATH = os.path.join(DATA_DIR, "invoices_store.json")
 TOKENS_DB_PATH = os.path.join(DATA_DIR, "caregiver_tokens.json")
+ORDER_MAPPINGS_DB_PATH = os.path.join(DATA_DIR, "order_mappings.json")
 
 def load_persisted_state():
-    """Restores INVOICE_STORE and CAREGIVER_TOKENS from durable local JSON storage."""
-    global INVOICE_STORE, CAREGIVER_TOKENS
+    """Restores INVOICE_STORE, CAREGIVER_TOKENS, ORDER_TO_INVOICE, and PROCESSED_CAPTURE_IDS from durable local JSON storage."""
+    global INVOICE_STORE, CAREGIVER_TOKENS, ORDER_TO_INVOICE, PROCESSED_CAPTURE_IDS
     with LEDGER_LOCK:
         if os.path.exists(INVOICES_DB_PATH):
             try:
@@ -94,8 +96,24 @@ def load_persisted_state():
             except Exception as e:
                 print(f"[Warning] Failed to restore caregiver tokens: {e}")
 
+        if os.path.exists(ORDER_MAPPINGS_DB_PATH):
+            try:
+                with open(ORDER_MAPPINGS_DB_PATH, "r", encoding="utf-8") as f:
+                    om_data = json.load(f)
+                    if isinstance(om_data, dict):
+                        orders_map = om_data.get("orders", {})
+                        if isinstance(orders_map, dict):
+                            ORDER_TO_INVOICE.update(orders_map)
+                        captures_list = om_data.get("processed_captures", [])
+                        if isinstance(captures_list, list):
+                            for cid in captures_list:
+                                PROCESSED_CAPTURE_IDS.add(cid)
+                        print(f"[Storage] Restored {len(orders_map)} order mapping(s) and {len(captures_list)} capture ID(s) from {ORDER_MAPPINGS_DB_PATH}")
+            except Exception as e:
+                print(f"[Warning] Failed to restore order mappings: {e}")
+
 def save_persisted_state():
-    """Atomically persists INVOICE_STORE and CAREGIVER_TOKENS to durable local storage."""
+    """Atomically persists INVOICE_STORE, CAREGIVER_TOKENS, and ORDER_TO_INVOICE to durable local storage."""
     try:
         os.makedirs(DATA_DIR, exist_ok=True)
         # 1. Persist INVOICE_STORE
@@ -109,6 +127,15 @@ def save_persisted_state():
         with open(tmp_tok, "w", encoding="utf-8") as f:
             json.dump(CAREGIVER_TOKENS, f, ensure_ascii=False, indent=2)
         os.replace(tmp_tok, TOKENS_DB_PATH)
+
+        # 3. Persist ORDER_TO_INVOICE and PROCESSED_CAPTURE_IDS
+        tmp_om = ORDER_MAPPINGS_DB_PATH + ".tmp"
+        with open(tmp_om, "w", encoding="utf-8") as f:
+            json.dump({
+                "orders": ORDER_TO_INVOICE,
+                "processed_captures": list(PROCESSED_CAPTURE_IDS)
+            }, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_om, ORDER_MAPPINGS_DB_PATH)
     except Exception as e:
         print(f"[Warning] Failed to persist state: {e}")
 
@@ -437,6 +464,7 @@ def create_paypal_order(amount, currency="USD", invoice_id="", payment_mode="ful
                             "payment_mode": payment_mode,
                             "created_at": time.strftime("%Y-%m-%d %H:%M:%S")
                         }
+                        save_persisted_state()
                 return {
                     "success": True,
                     "order_id": order_id,
@@ -598,6 +626,11 @@ def capture_paypal_order(order_id):
                         inv["paid_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
                         ACTIVE_INVOICE_ORDERS.pop(invoice_id, None)
                         save_persisted_state()
+                    else:
+                        settlement_status = "CAPTURED_UNMAPPED"
+                        PROCESSED_CAPTURE_IDS.add(cap_id)
+                        save_persisted_state()
+                        print(f"[Warning] Captured order {order_id} has no matching local invoice in store.")
 
                 return {
                     "success": True,
