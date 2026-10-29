@@ -341,9 +341,59 @@
     .upload-zone p {
       font-size: 11px;
       color: var(--text-dim);
+      margin-bottom: 8px;
     }
 
-    #fileInput {
+    .upload-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .upload-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--bg-card);
+      color: #fff;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 7px 12px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .upload-btn:hover {
+      background: var(--bg-card-hover);
+      transform: translateY(-1px);
+    }
+
+    .upload-btn.camera-btn {
+      border-color: rgba(6, 182, 212, 0.5);
+      background: rgba(6, 182, 212, 0.12);
+      color: #67e8f9;
+    }
+
+    .upload-btn.camera-btn:hover {
+      background: rgba(6, 182, 212, 0.25);
+      border-color: var(--accent-cyan);
+    }
+
+    .upload-btn.gallery-btn {
+      border-color: rgba(255, 196, 57, 0.5);
+      background: rgba(255, 196, 57, 0.12);
+      color: #fde047;
+    }
+
+    .upload-btn.gallery-btn:hover {
+      background: rgba(255, 196, 57, 0.25);
+      border-color: var(--pp-gold);
+    }
+
+    #cameraInput, #galleryInput, #fileInput {
       display: none;
     }
 
@@ -874,11 +924,22 @@
             </button>
           </div>
 
-          <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
-            <div class="upload-icon">📷</div>
-            <h4>Upload or Snap Photo</h4>
-            <p>Drag & drop bill image or tap to take photo with camera</p>
-            <input type="file" id="fileInput" accept="image/*" capture="environment" onchange="handleFileUpload(event)">
+          <div class="upload-zone" id="dropZone" onclick="document.getElementById('galleryInput').click()">
+            <div class="upload-icon">📄</div>
+            <h4>Add Medical Bill Photo</h4>
+            <p>Drag & drop image here, or choose an option below:</p>
+            <div class="upload-actions">
+              <button type="button" class="upload-btn camera-btn" onclick="event.stopPropagation(); document.getElementById('cameraInput').click()">
+                📷 Snap with Camera
+              </button>
+              <button type="button" class="upload-btn gallery-btn" onclick="event.stopPropagation(); document.getElementById('galleryInput').click()">
+                🖼️ Choose from Gallery
+              </button>
+            </div>
+            <!-- Hidden Camera Input (Mobile Camera Direct) -->
+            <input type="file" id="cameraInput" accept="image/*" capture="environment" onchange="handleFileUpload(event)">
+            <!-- Hidden Gallery Input (Photo Library / Local File Picker) -->
+            <input type="file" id="galleryInput" accept="image/*" onchange="handleFileUpload(event)">
           </div>
 
           <div class="image-preview-wrapper">
