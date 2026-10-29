@@ -874,11 +874,11 @@
             </button>
           </div>
 
-          <div class="upload-zone" onclick="document.getElementById('fileInput').click()">
+          <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
             <div class="upload-icon">📷</div>
-            <h4>Upload Custom Photo</h4>
-            <p>Drag & drop itemized bill or take a photo</p>
-            <input type="file" id="fileInput" accept="image/*" onchange="handleFileUpload(event)">
+            <h4>Upload or Snap Photo</h4>
+            <p>Drag & drop bill image or tap to take photo with camera</p>
+            <input type="file" id="fileInput" accept="image/*" capture="environment" onchange="handleFileUpload(event)">
           </div>
 
           <div class="image-preview-wrapper">
@@ -1353,6 +1353,29 @@
             }
           })
           .catch(e => console.error(e));
+      }
+
+      // Setup Drag & Drop for Bill Photos
+      const dropZone = document.getElementById('dropZone');
+      if (dropZone) {
+        dropZone.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          dropZone.style.borderColor = 'var(--pp-gold)';
+          dropZone.style.background = 'rgba(255, 196, 57, 0.08)';
+        });
+        dropZone.addEventListener('dragleave', (e) => {
+          e.preventDefault();
+          dropZone.style.borderColor = 'var(--border-subtle)';
+          dropZone.style.background = 'transparent';
+        });
+        dropZone.addEventListener('drop', (e) => {
+          e.preventDefault();
+          dropZone.style.borderColor = 'var(--border-subtle)';
+          dropZone.style.background = 'transparent';
+          if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
+            handleFileUpload({ target: { files: e.dataTransfer.files } });
+          }
+        });
       }
 
       // Initialize PayPal SDK buttons
