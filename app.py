@@ -320,27 +320,32 @@ def capture_paypal_order(order_id):
                                 "error": f"Invoice {invoice_id} is already settled in full. Duplicate capture blocked."
                             }
 
+                        total_patient_due = to_money(inv.get("patient_due", 0.0))
+                        disputed_amt = to_money(inv.get("disputed_due", 0.0))
+                        prior_paid = to_money(inv.get("total_captured_amount", 0.0))
+                        new_paid_total = to_money(prior_paid + captured_amount)
+                        inv["total_captured_amount"] = new_paid_total
+
+                        rem = max(0.0, to_money(total_patient_due - new_paid_total))
+                        inv["remaining_patient_due"] = rem
+
+                        # Initial verified portion is (total_patient_due - disputed_amt)
+                        initial_verified = max(0.0, to_money(total_patient_due - disputed_amt))
+                        inv["verified_due"] = max(0.0, to_money(initial_verified - new_paid_total))
+
                         if payment_mode == "verified_only":
-                            settlement_status = "PARTIALLY_SETTLED_DISPUTE_HELD"
+                            settlement_status = "SETTLED_FULL" if rem <= 0.01 else "PARTIALLY_SETTLED_DISPUTE_HELD"
                             inv["status"] = settlement_status
-                            inv["settled_portion"] = to_money(captured_amount)
-                            inv["verified_due"] = 0.0  # Zero out verified copay to prevent repeat payments
-                            rem = max(0.0, float(inv.get("disputed_due", 0.0)))
-                            inv["remaining_patient_due"] = to_money(rem)
-                            inv["remaining_disputed_balance"] = to_money(rem)
+                            inv["settled_portion"] = new_paid_total
+                            inv["remaining_disputed_balance"] = min(rem, disputed_amt)
                         elif payment_mode == "family_split":
-                            settlement_status = "FAMILY_CONTRIBUTION_RECORDED"
-                            prior_paid = float(inv.get("family_contributions_total", 0.0))
-                            new_total = to_money(prior_paid + captured_amount)
-                            inv["family_contributions_total"] = new_total
-                            rem = max(0.0, float(inv.get("patient_due", 0.0)) - new_total)
-                            inv["remaining_patient_due"] = to_money(rem)
-                            inv["status"] = "SETTLED_FULL" if rem <= 0.01 else "PARTIALLY_SETTLED"
-                        else:
-                            settlement_status = "PAID_IN_FULL"
+                            prior_fam = to_money(inv.get("family_contributions_total", 0.0))
+                            inv["family_contributions_total"] = to_money(prior_fam + captured_amount)
+                            settlement_status = "SETTLED_FULL" if rem <= 0.01 else "PARTIALLY_SETTLED"
                             inv["status"] = settlement_status
-                            inv["remaining_patient_due"] = 0.0
-                            inv["verified_due"] = 0.0
+                        else:
+                            settlement_status = "PAID_IN_FULL" if rem <= 0.01 else "PARTIALLY_SETTLED"
+                            inv["status"] = settlement_status
 
                         # Record immutable capture event audit trail
                         inv.setdefault("captures", []).append({
@@ -448,9 +453,16 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
         if clean_path.startswith("api/caregiver-invoice/"):
             cg_token = clean_path.replace("api/caregiver-invoice/", "").split("?")[0]
             with LEDGER_LOCK:
-                inv_id = CAREGIVER_TOKENS.get(cg_token)
-                if not inv_id or inv_id not in INVOICE_STORE:
+                token_meta = CAREGIVER_TOKENS.get(cg_token)
+                if not token_meta:
                     self.send_json({"success": False, "error": "Invalid or expired caregiver token", "message": "Link has expired or does not exist."}, status=404)
+                    return
+                inv_id = token_meta["invoice_id"] if isinstance(token_meta, dict) else token_meta
+                split_pct = token_meta.get("split_percent", 100) if isinstance(token_meta, dict) else 100
+                req_amt = token_meta.get("requested_amount", 0.0) if isinstance(token_meta, dict) else 0.0
+
+                if inv_id not in INVOICE_STORE:
+                    self.send_json({"success": False, "error": "Invoice no longer exists"}, status=404)
                     return
                 raw_inv = INVOICE_STORE[inv_id]
                 # Strict HIPAA Safe Harbor (45 CFR § 164.514) Allowlist-Only Projection:
@@ -470,6 +482,7 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
                         "flag": "Caregiver Contribution View"
                     })
                 
+                rem_due = raw_inv.get("remaining_patient_due", raw_inv.get("patient_due", 0.0))
                 safe_inv = {
                     "invoice_id": inv_id,
                     "caregiver_token": cg_token,
@@ -479,10 +492,12 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
                     "patient_name": "Protected Patient (HIPAA Safe Harbor)",
                     "total_amount": raw_inv.get("total_amount", 0.0),
                     "insurance_covered": raw_inv.get("insurance_covered", 0.0),
-                    "patient_due": raw_inv.get("remaining_patient_due", raw_inv.get("patient_due", 0.0)),
+                    "patient_due": rem_due,
                     "verified_due": raw_inv.get("verified_due", 0.0),
-                    "disputed_due": raw_inv.get("disputed_due", 0.0),
-                    "remaining_patient_due": raw_inv.get("remaining_patient_due", raw_inv.get("patient_due", 0.0)),
+                    "disputed_due": 0.0,  # Shield raw clinical disputes from caregiver
+                    "remaining_patient_due": rem_due,
+                    "requested_split_percent": split_pct,
+                    "requested_amount": req_amt if req_amt > 0.0 else rem_due,
                     "pay_in_4_eligible": raw_inv.get("pay_in_4_eligible", False),
                     "pay_in_4_installment": raw_inv.get("pay_in_4_installment", 0.0),
                     "status": raw_inv.get("status", "UNPAID"),
@@ -490,7 +505,7 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
                     "items": safe_items,
                     "ai_insights": [
                         "🛡️ HIPAA Safe Harbor Active: Patient name, clinical diagnoses, and service dates (month/day) strictly de-identified.",
-                        "Direct PayPal Settlement: Family members contribute securely without accessing protected health records."
+                        f"Family Care Contribution: Requested share of {split_pct}% (${req_amt:.2f}) ready for secure PayPal settlement."
                     ]
                 }
             self.send_json({"success": True, "invoice": safe_inv, "privacy_mode": True})
@@ -501,37 +516,38 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
             query_params = urllib.parse.parse_qs(parsed.query)
             is_caregiver_mode = query_params.get("mode", [""])[0] == "caregiver"
 
-            if inv_id in INVOICE_STORE:
-                raw_inv = INVOICE_STORE[inv_id]
-                if is_caregiver_mode:
-                    # Privacy-Preserving HIPAA Safe Harbor Masking for Family / Caregivers
-                    p_name = raw_inv.get("patient_name", "Patient")
-                    masked_name = p_name[0] + "****** " + (p_name.split()[-1][0] + "****" if len(p_name.split()) > 1 else "")
-                    
-                    masked_items = []
-                    for idx, it in enumerate(raw_inv.get("items", [])):
-                        masked_items.append({
-                            "code": f"HIPAA-PROT-0{idx+1}",
-                            "desc": "Protected Healthcare Clinical Service (Caregiver View)",
-                            "charge": it.get("charge", 0.0),
-                            "insured": it.get("insured", 0.0),
-                            "due": it.get("due", 0.0),
-                            "flag": "Caregiver Co-Pay Contribution View"
-                        })
-                    
-                    caregiver_inv = copy.deepcopy(raw_inv)
-                    caregiver_inv["patient_name"] = masked_name
-                    caregiver_inv["items"] = masked_items
-                    caregiver_inv["hipaa_privacy_mode"] = True
-                    caregiver_inv["ai_insights"] = [
-                        "🛡️ HIPAA Privacy Shield Active: Clinical diagnoses & drug identifiers masked for caregiver contribution.",
-                        "Direct PayPal Settlement: Family members can contribute to the copay safely without viewing private diagnostic records."
-                    ]
-                    self.send_json({"success": True, "invoice": caregiver_inv, "privacy_mode": True})
+            with LEDGER_LOCK:
+                if inv_id in INVOICE_STORE:
+                    raw_inv = INVOICE_STORE[inv_id]
+                    if is_caregiver_mode:
+                        # Privacy-Preserving HIPAA Safe Harbor Masking for Family / Caregivers
+                        p_name = raw_inv.get("patient_name", "Patient")
+                        masked_name = p_name[0] + "****** " + (p_name.split()[-1][0] + "****" if len(p_name.split()) > 1 else "")
+                        
+                        masked_items = []
+                        for idx, it in enumerate(raw_inv.get("items", [])):
+                            masked_items.append({
+                                "code": f"HIPAA-PROT-0{idx+1}",
+                                "desc": "Protected Healthcare Clinical Service (Caregiver View)",
+                                "charge": it.get("charge", 0.0),
+                                "insured": it.get("insured", 0.0),
+                                "due": it.get("due", 0.0),
+                                "flag": "Caregiver Co-Pay Contribution View"
+                            })
+                        
+                        caregiver_inv = copy.deepcopy(raw_inv)
+                        caregiver_inv["patient_name"] = masked_name
+                        caregiver_inv["items"] = masked_items
+                        caregiver_inv["hipaa_privacy_mode"] = True
+                        caregiver_inv["ai_insights"] = [
+                            "🛡️ HIPAA Privacy Shield Active: Clinical diagnoses & drug identifiers masked for caregiver contribution.",
+                            "Direct PayPal Settlement: Family members can contribute to the copay safely without viewing private diagnostic records."
+                        ]
+                        self.send_json({"success": True, "invoice": caregiver_inv, "privacy_mode": True})
+                    else:
+                        self.send_json({"success": True, "invoice": raw_inv, "privacy_mode": False})
                 else:
-                    self.send_json({"success": True, "invoice": raw_inv, "privacy_mode": False})
-            else:
-                self.send_json({"success": False, "error": "Invoice not found"}, status=404)
+                    self.send_json({"success": False, "error": "Invoice not found"}, status=404)
             return
 
         self.send_error(404, "Resource not found")
@@ -599,7 +615,8 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
                 "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
                 **data
             }
-            INVOICE_STORE[inv_id] = invoice_record
+            with LEDGER_LOCK:
+                INVOICE_STORE[inv_id] = invoice_record
             self.send_json({"success": True, "source": "sample_verified", "data": invoice_record})
             return
 
@@ -702,7 +719,8 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
                             "No Surprises Act: Provider itemization cross-checked against standard healthcare benchmarks."
                         ]
                     }
-                    INVOICE_STORE[inv_id] = invoice_record
+                    with LEDGER_LOCK:
+                        INVOICE_STORE[inv_id] = invoice_record
                     self.send_json({"success": True, "source": "live_vision_pipeline", "data": invoice_record})
                     return
             except Exception as e:
@@ -818,6 +836,12 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
 
         invoice_id = str(body.get("invoice_id", "")).strip()
         caregiver_email = str(body.get("caregiver_email", "")).strip() or "family@example.com"
+        try:
+            split_percent = int(body.get("split_percent", 100))
+            if split_percent not in (25, 50, 100):
+                split_percent = 100
+        except (ValueError, TypeError):
+            split_percent = 100
 
         with LEDGER_LOCK:
             if not invoice_id or invoice_id not in INVOICE_STORE:
@@ -831,7 +855,15 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
             record = INVOICE_STORE[invoice_id]
             # Cryptographically isolated caregiver bearer token (HIPAA Safe Harbor)
             cg_token = f"CG-{secrets.token_urlsafe(16)}"
-            CAREGIVER_TOKENS[cg_token] = invoice_id
+            rem_due = to_money(record.get("remaining_patient_due", record.get("patient_due", 0.0)))
+            req_amount = to_money(max(1.00, rem_due * (split_percent / 100.0))) if rem_due > 0 else 0.0
+
+            CAREGIVER_TOKENS[cg_token] = {
+                "invoice_id": invoice_id,
+                "split_percent": split_percent,
+                "requested_amount": req_amount,
+                "created_at": time.time()
+            }
             share_url = f"http://{HOST}:{PORT}/?cg_token={cg_token}"
 
             self.send_json({
@@ -840,14 +872,16 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
                 "invoice_id": invoice_id,
                 "share_url": share_url,
                 "caregiver_email": caregiver_email,
+                "split_percent": split_percent,
+                "requested_amount": req_amount,
                 "patient_name_masked": "Protected Patient (HIPAA Safe Harbor)",
                 "patient_due": float(record.get("patient_due", 0.0)),
-                "remaining_patient_due": float(record.get("remaining_patient_due", record.get("patient_due", 0.0))),
+                "remaining_patient_due": rem_due,
                 "verified_due": float(record.get("verified_due", record.get("patient_due", 0.0))),
                 "pay_in_4_eligible": bool(record.get("pay_in_4_eligible", False)),
                 "pay_in_4_installment": float(record.get("pay_in_4_installment", 0.0)),
                 "hipaa_safe_harbor": True,
-                "message": "Caregiver privacy-preserving payment link generated with decoupled bearer token."
+                "message": f"Caregiver privacy-preserving payment link generated ({split_percent}% contribution: ${req_amount:.2f})."
             })
 
     def handle_appeal_generate(self, body):
@@ -877,6 +911,12 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
         patient_name = record.get("patient_name", "Valued Patient")
         date_of_service = record.get("date", time.strftime("%Y-%m-%d"))
         today_str = time.strftime("%B %d, %Y")
+
+        # Shield protected identity if requested in HIPAA Safe Harbor caregiver mode
+        if bool(body.get("is_caregiver") or body.get("hipaa_privacy_mode") or record.get("hipaa_privacy_mode")):
+            patient_name = "Protected Patient (HIPAA Safe Harbor)"
+            facility = "Verified Healthcare Facility (HIPAA Safe Harbor)"
+            date_of_service = str(date_of_service)[:4] + "-XX-XX (HIPAA Safe Harbor Redacted)"
         
         items = record.get("items", [])
         

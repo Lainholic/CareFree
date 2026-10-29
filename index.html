@@ -1481,7 +1481,7 @@
           </div>
 
           <!-- Family Caregiver Card -->
-          <div class="caregiver-card">
+          <div class="caregiver-card" id="caregiverShareCard">
             <h4>👨‍👩‍👧 Family Split & Caregiver Link</h4>
             <p>Send a privacy-shielded payment request to family members (HIPAA Safe Harbor certified).</p>
             <div class="split-amount-presets" id="splitPresetsRow">
@@ -1950,6 +1950,28 @@
         });
       }
 
+      // Dynamic control of Appeal/Dispute Banner based on bill items
+      const appealBanner = document.getElementById('appealBanner');
+      const appealDesc = document.getElementById('appealBannerDesc');
+      const surpriseItems = (data.items || []).filter(it => String(it.flag || '').includes('Surprise') || String(it.flag || '').includes('Dispute'));
+
+      if (appealBanner) {
+        if (data.hipaa_privacy_mode || disputedDue <= 0.0 || surpriseItems.length === 0) {
+          appealBanner.style.display = 'none';
+        } else {
+          appealBanner.style.display = 'flex';
+          const codes = surpriseItems.map(i => i.code).join(', ');
+          if (appealDesc && currentLang === 'en') {
+            appealDesc.textContent = `Detected potential balance billing (${codes} • $${disputedDue.toFixed(2)}). Generate a formal inquiry under 45 CFR § 149.410.`;
+          }
+        }
+      }
+
+      // If requested split percent was provided by caregiver token, apply it
+      if (data.requested_split_percent) {
+        setCaregiverSplit(String(data.requested_split_percent));
+      }
+
       updatePricingDisplay();
     }
 
@@ -2163,6 +2185,16 @@
               document.getElementById('modalTxId').textContent = captureData.capture_id;
               document.getElementById('modalProvider').textContent = currentInvoice.facility || "Healthcare Provider";
               document.getElementById('modalTime').textContent = new Date().toLocaleString();
+
+              // Immediately sync invoice state with server ledger to update remaining balance in real time
+              if (currentInvoice.caregiver_token) {
+                fetch('/api/caregiver-invoice/' + encodeURIComponent(currentInvoice.caregiver_token))
+                  .then(r => r.json()).then(res => { if (res.success && res.invoice) renderBillData(res.invoice); });
+              } else if (currentInvoice.invoice_id) {
+                fetch('/api/invoice/' + encodeURIComponent(currentInvoice.invoice_id))
+                  .then(r => r.json()).then(res => { if (res.success && res.invoice) renderBillData(res.invoice); });
+              }
+
               document.getElementById('successModal').style.display = 'flex';
             });
           },
