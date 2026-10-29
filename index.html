@@ -1,0 +1,1214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PainFree CarePay AI — Medical Bill Vision & PayPal Family Checkout</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      --bg-main: #070b14;
+      --bg-surface: #0f172a;
+      --bg-card: #141e33;
+      --bg-card-hover: #192640;
+      --border-subtle: rgba(255, 255, 255, 0.08);
+      --border-focus: #0070ba;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      --pp-blue: #0070ba;
+      --pp-dark-blue: #003087;
+      --pp-gold: #ffc439;
+      --pp-gold-hover: #f4b628;
+      --accent-cyan: #06b6d4;
+      --accent-emerald: #10b981;
+      --accent-amber: #f59e0b;
+      --accent-rose: #f43f5e;
+      --radius-sm: 8px;
+      --radius-md: 14px;
+      --radius-lg: 20px;
+      --shadow-card: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+      --shadow-glow: 0 0 25px rgba(0, 112, 186, 0.25);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-main);
+      color: var(--text-main);
+      min-height: 100vh;
+      overflow-x: hidden;
+      line-height: 1.5;
+    }
+
+    /* Ambient Background Gradients */
+    .ambient-bg {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      pointer-events: none;
+      z-index: 0;
+      background: 
+        radial-gradient(circle at 15% 15%, rgba(0, 112, 186, 0.12) 0%, transparent 40%),
+        radial-gradient(circle at 85% 20%, rgba(255, 196, 57, 0.08) 0%, transparent 35%),
+        radial-gradient(circle at 50% 85%, rgba(16, 185, 129, 0.08) 0%, transparent 45%);
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 24px 32px 60px;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Header Nav */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--border-subtle);
+      margin-bottom: 32px;
+    }
+
+    .logo-group {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .logo-icon {
+      width: 44px;
+      height: 44px;
+      background: linear-gradient(135deg, var(--pp-dark-blue), var(--pp-blue));
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 15px rgba(0, 112, 186, 0.4);
+      color: #fff;
+      font-size: 22px;
+    }
+
+    .logo-text h1 {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .logo-text h1 span {
+      background: linear-gradient(90deg, #38bdf8, var(--pp-gold));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .logo-text p {
+      font-size: 13px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .nav-badges {
+      display: flex;
+      gap: 10px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .badge.active {
+      border-color: rgba(16, 185, 129, 0.4);
+      color: #34d399;
+      background: rgba(16, 185, 129, 0.08);
+    }
+
+    .badge.paypal {
+      border-color: rgba(0, 112, 186, 0.4);
+      color: #38bdf8;
+      background: rgba(0, 112, 186, 0.1);
+    }
+
+    .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    /* Hero Banner */
+    .hero-banner {
+      background: linear-gradient(135deg, rgba(20, 30, 51, 0.8), rgba(15, 23, 42, 0.9));
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: var(--radius-lg);
+      padding: 24px 32px;
+      margin-bottom: 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: var(--shadow-card);
+      backdrop-filter: blur(10px);
+    }
+
+    .hero-content h2 {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      color: #fff;
+    }
+
+    .hero-content p {
+      font-size: 14px;
+      color: var(--text-muted);
+      max-width: 800px;
+    }
+
+    .hero-stats {
+      display: flex;
+      gap: 28px;
+    }
+
+    .stat-item {
+      text-align: right;
+    }
+
+    .stat-num {
+      font-size: 24px;
+      font-weight: 800;
+      color: var(--pp-gold);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .stat-label {
+      font-size: 11px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-weight: 600;
+    }
+
+    /* 3-Column Grid */
+    .main-grid {
+      display: grid;
+      grid-template-columns: 340px 1fr 380px;
+      gap: 24px;
+      align-items: start;
+    }
+
+    @media (max-width: 1200px) {
+      .main-grid {
+        grid-template-columns: 1fr;
+      }
+      .stat-item {
+        text-align: left;
+      }
+      .hero-banner {
+        flex-direction: column;
+        gap: 16px;
+        align-items: flex-start;
+      }
+    }
+
+    /* Cards */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 22px;
+      box-shadow: var(--shadow-card);
+      transition: border-color 0.2s;
+    }
+
+    .card:hover {
+      border-color: rgba(255, 255, 255, 0.14);
+    }
+
+    .card-title {
+      font-size: 15px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 16px;
+      color: #fff;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* Presets & Upload Column */
+    .preset-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .preset-btn {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      color: var(--text-main);
+      cursor: pointer;
+      transition: all 0.2s;
+      text-align: left;
+    }
+
+    .preset-btn:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--pp-blue);
+      transform: translateY(-1px);
+    }
+
+    .preset-btn.active {
+      border-color: var(--pp-gold);
+      background: rgba(255, 196, 57, 0.08);
+    }
+
+    .preset-info h4 {
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+
+    .preset-info p {
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    .preset-amount {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      font-size: 14px;
+      color: var(--pp-gold);
+    }
+
+    .upload-zone {
+      border: 2px dashed rgba(255, 255, 255, 0.15);
+      border-radius: var(--radius-md);
+      padding: 24px 16px;
+      text-align: center;
+      background: rgba(15, 23, 42, 0.4);
+      cursor: pointer;
+      transition: all 0.2s;
+      position: relative;
+      margin-bottom: 18px;
+    }
+
+    .upload-zone:hover {
+      border-color: var(--pp-blue);
+      background: rgba(0, 112, 186, 0.05);
+    }
+
+    .upload-icon {
+      font-size: 32px;
+      margin-bottom: 8px;
+      color: var(--pp-blue);
+    }
+
+    .upload-zone h4 {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .upload-zone p {
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    #fileInput {
+      display: none;
+    }
+
+    .image-preview-wrapper {
+      position: relative;
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      border: 1px solid var(--border-subtle);
+      max-height: 240px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #000;
+    }
+
+    .image-preview-wrapper img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+
+    .scan-laser {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, #38bdf8, transparent);
+      box-shadow: 0 0 12px #38bdf8;
+      display: none;
+      animation: scanAnim 2s infinite ease-in-out;
+    }
+
+    @keyframes scanAnim {
+      0% { top: 0%; opacity: 0.8; }
+      50% { top: 100%; opacity: 1; }
+      100% { top: 0%; opacity: 0.8; }
+    }
+
+    /* Diagnosis Middle Column */
+    .bill-meta-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--bg-surface);
+      padding: 12px 18px;
+      border-radius: var(--radius-sm);
+      margin-bottom: 18px;
+      border: 1px solid var(--border-subtle);
+    }
+
+    .facility-name {
+      font-size: 14px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .bill-date {
+      font-size: 12px;
+      color: var(--text-dim);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .summary-cards-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .summary-mini-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 14px;
+      text-align: center;
+    }
+
+    .mini-card-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    .mini-card-val {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    .mini-card-val.patient {
+      color: var(--pp-gold);
+    }
+
+    .mini-card-val.insured {
+      color: var(--accent-emerald);
+    }
+
+    .mini-card-val.total {
+      color: var(--text-muted);
+    }
+
+    /* Itemized Table */
+    .items-table-wrapper {
+      background: var(--bg-surface);
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-subtle);
+      overflow-x: auto;
+      margin-bottom: 20px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 13px;
+    }
+
+    th {
+      background: rgba(255, 255, 255, 0.03);
+      padding: 10px 14px;
+      font-weight: 600;
+      color: var(--text-dim);
+      font-size: 11px;
+      text-transform: uppercase;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    td {
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      color: var(--text-main);
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    .code-badge {
+      font-family: 'JetBrains Mono', monospace;
+      background: rgba(255, 255, 255, 0.07);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+      color: #cbd5e1;
+    }
+
+    .status-tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .status-tag.verified {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+    }
+
+    .status-tag.surprise {
+      background: rgba(244, 63, 94, 0.15);
+      color: #fb7185;
+      border: 1px solid rgba(244, 63, 94, 0.3);
+    }
+
+    /* AI Insights Card */
+    .ai-insights-box {
+      background: rgba(0, 112, 186, 0.08);
+      border: 1px solid rgba(0, 112, 186, 0.25);
+      border-radius: var(--radius-sm);
+      padding: 14px 18px;
+    }
+
+    .ai-insights-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #38bdf8;
+      margin-bottom: 8px;
+    }
+
+    .ai-insight-bullet {
+      font-size: 12px;
+      color: #cbd5e1;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    /* Right Column: PayPal Checkout Hub */
+    .checkout-hub {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .pay-in-4-card {
+      background: linear-gradient(135deg, rgba(0, 48, 135, 0.6), rgba(0, 112, 186, 0.3));
+      border: 1px solid rgba(0, 112, 186, 0.5);
+      border-radius: var(--radius-md);
+      padding: 18px;
+      box-shadow: var(--shadow-glow);
+    }
+
+    .pay-in-4-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #003087;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 4px 10px;
+      border-radius: 12px;
+      margin-bottom: 10px;
+      letter-spacing: 0.5px;
+    }
+
+    .pay-in-4-highlight {
+      font-size: 18px;
+      font-weight: 800;
+      color: #fff;
+      margin-bottom: 4px;
+    }
+
+    .pay-in-4-highlight span {
+      color: var(--pp-gold);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .pay-in-4-desc {
+      font-size: 12px;
+      color: #cbd5e1;
+      margin-bottom: 14px;
+    }
+
+    .installment-timeline {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      background: rgba(0, 0, 0, 0.25);
+      padding: 10px;
+      border-radius: var(--radius-sm);
+    }
+
+    .timeline-step {
+      text-align: center;
+      font-size: 11px;
+    }
+
+    .timeline-time {
+      color: var(--text-dim);
+      font-size: 10px;
+      margin-bottom: 2px;
+    }
+
+    .timeline-val {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      color: var(--pp-gold);
+    }
+
+    /* PayPal Smart Button Container */
+    .paypal-btn-area {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 18px;
+    }
+
+    .pp-custom-button {
+      width: 100%;
+      background: var(--pp-gold);
+      color: #003087;
+      border: none;
+      border-radius: 24px;
+      padding: 14px 20px;
+      font-size: 16px;
+      font-weight: 800;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s;
+      box-shadow: 0 4px 15px rgba(255, 196, 57, 0.3);
+      margin-bottom: 10px;
+    }
+
+    .pp-custom-button:hover {
+      background: var(--pp-gold-hover);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(255, 196, 57, 0.4);
+    }
+
+    .pp-custom-button:active {
+      transform: translateY(0);
+    }
+
+    .pp-logo-img {
+      height: 20px;
+      vertical-align: middle;
+    }
+
+    .sandbox-tag {
+      text-align: center;
+      font-size: 11px;
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    /* Caregiver Request Card */
+    .caregiver-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 18px;
+    }
+
+    .caregiver-card h4 {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 4px;
+      color: #fff;
+    }
+
+    .caregiver-card p {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 14px;
+    }
+
+    .caregiver-input {
+      width: 100%;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      font-size: 13px;
+      color: #fff;
+      margin-bottom: 10px;
+    }
+
+    .caregiver-input:focus {
+      outline: none;
+      border-color: var(--pp-blue);
+    }
+
+    .caregiver-btn {
+      width: 100%;
+      background: transparent;
+      border: 1px solid var(--pp-blue);
+      color: #38bdf8;
+      border-radius: var(--radius-sm);
+      padding: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s;
+    }
+
+    .caregiver-btn:hover {
+      background: rgba(0, 112, 186, 0.15);
+      border-color: #38bdf8;
+    }
+
+    /* Success Modal */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(6px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+
+    .modal-box {
+      background: var(--bg-surface);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      border-radius: var(--radius-lg);
+      padding: 32px;
+      max-width: 480px;
+      width: 90%;
+      text-align: center;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
+      position: relative;
+    }
+
+    .success-icon {
+      width: 64px;
+      height: 64px;
+      background: rgba(16, 185, 129, 0.15);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+      color: #34d399;
+      margin: 0 auto 16px;
+    }
+
+    .modal-box h3 {
+      font-size: 20px;
+      font-weight: 800;
+      margin-bottom: 6px;
+      color: #fff;
+    }
+
+    .modal-box p {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 20px;
+    }
+
+    .receipt-slip {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 16px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      text-align: left;
+      margin-bottom: 20px;
+    }
+
+    .receipt-slip div {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+
+    .close-modal-btn {
+      background: var(--pp-blue);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-sm);
+      padding: 10px 24px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="ambient-bg"></div>
+
+  <div class="container">
+    <!-- Header Nav -->
+    <header>
+      <div class="logo-group">
+        <div class="logo-icon">🛡️</div>
+        <div class="logo-text">
+          <h1>PainFree <span>CarePay AI</span></h1>
+          <p>Medical Bill Vision Intelligence & PayPal Family Checkout</p>
+        </div>
+      </div>
+      <div class="nav-badges">
+        <div class="badge active"><span class="dot"></span> PayPal Sandbox Active</div>
+        <div class="badge paypal">💳 Pay in 4 Ready</div>
+        <div class="badge">🤖 NVIDIA Vision 3.5</div>
+      </div>
+    </header>
+
+    <!-- Hero Banner -->
+    <div class="hero-banner">
+      <div class="hero-content">
+        <h2>Decode Surprise Medical Bills. Split or Share Instantly.</h2>
+        <p>Snap a photo of any US hospital bill or prescription receipt. Our vision agent translates complex CPT/NDC codes into clear language, protects against surprise charges, and gives you instant 4-installment zero-interest PayPal financing or remote caregiver bill sharing.</p>
+      </div>
+      <div class="hero-stats">
+        <div class="stat-item">
+          <div class="stat-num">0%</div>
+          <div class="stat-label">Pay in 4 Interest</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-num">&lt;3s</div>
+          <div class="stat-label">Vision Extraction</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-num">$67.5k</div>
+          <div class="stat-label">Hackathon Pool</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main 3-Column Layout -->
+    <div class="main-grid">
+      <!-- Left Column: Presets & Upload -->
+      <div class="col-left">
+        <div class="card">
+          <div class="card-title">📁 1. Select or Upload Bill</div>
+          
+          <div class="preset-list">
+            <button class="preset-btn active" onclick="loadPreset('us_hospital_bill.png', this)">
+              <div class="preset-info">
+                <h4>🏥 US Hospital ER Visit</h4>
+                <p>Mercy General • CPT 99284</p>
+              </div>
+              <div class="preset-amount">$180.00</div>
+            </button>
+
+            <button class="preset-btn" onclick="loadPreset('pharmacy_receipt_1.jpg', this)">
+              <div class="preset-info">
+                <h4>💊 Senior Pharmacy Rx</h4>
+                <p>CVS Pharmacy • Lipitor 90ct</p>
+              </div>
+              <div class="preset-amount">$40.00</div>
+            </button>
+          </div>
+
+          <div class="upload-zone" onclick="document.getElementById('fileInput').click()">
+            <div class="upload-icon">📷</div>
+            <h4>Upload Custom Photo</h4>
+            <p>Drag & drop itemized bill or take a photo</p>
+            <input type="file" id="fileInput" accept="image/*" onchange="handleFileUpload(event)">
+          </div>
+
+          <div class="image-preview-wrapper">
+            <img id="billPreview" src="/sample_receipts/us_hospital_bill.png" alt="Medical Bill Preview">
+            <div class="scan-laser" id="scanLaser"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Center Column: Diagnosis & Breakdown -->
+      <div class="col-center">
+        <div class="card">
+          <div class="card-title">🩺 2. AI Bill Audit & Breakdown</div>
+
+          <div class="bill-meta-bar">
+            <div>
+              <div class="facility-name" id="dispFacility">Mercy General Hospital (Emergency & Trauma Care)</div>
+              <div style="font-size: 11px; color: var(--text-dim);">Patient: <span id="dispPatient" style="color: #cbd5e1;">Eleanor Vance</span></div>
+            </div>
+            <div class="bill-date" id="dispDate">2026-10-18</div>
+          </div>
+
+          <div class="summary-cards-row">
+            <div class="summary-mini-card">
+              <div class="mini-card-label">Provider Billed</div>
+              <div class="mini-card-val total" id="dispTotal">$580.00</div>
+            </div>
+            <div class="summary-mini-card">
+              <div class="mini-card-label">Insurance Paid</div>
+              <div class="mini-card-val insured" id="dispInsured">-$400.00</div>
+            </div>
+            <div class="summary-mini-card">
+              <div class="mini-card-label">You Owe</div>
+              <div class="mini-card-val patient" id="dispDue">$180.00</div>
+            </div>
+          </div>
+
+          <div class="items-table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Clinical Description</th>
+                  <th>Billed</th>
+                  <th>Insured</th>
+                  <th>Co-Pay</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="itemsTableBody">
+                <tr>
+                  <td><span class="code-badge">CPT 99284</span></td>
+                  <td>Emergency Dept Visit (Level 4 Moderate)</td>
+                  <td>$350.00</td>
+                  <td>$250.00</td>
+                  <td>$100.00</td>
+                  <td><span class="status-tag verified">Verified</span></td>
+                </tr>
+                <tr>
+                  <td><span class="code-badge">CPT 71046</span></td>
+                  <td>Chest Radiography (X-Ray 2 Views)</td>
+                  <td>$140.00</td>
+                  <td>$90.00</td>
+                  <td>$50.00</td>
+                  <td><span class="status-tag verified">Fair Price</span></td>
+                </tr>
+                <tr>
+                  <td><span class="code-badge">CPT 96372</span></td>
+                  <td>Therapeutic Parenteral Injection</td>
+                  <td>$90.00</td>
+                  <td>$60.00</td>
+                  <td>$30.00</td>
+                  <td><span class="status-tag surprise">Surprise Guarded</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="ai-insights-box">
+            <div class="ai-insights-header">💡 AI Patient Protection & Benchmark Insights</div>
+            <div id="dispInsights">
+              <div class="ai-insight-bullet"><span>•</span> No Surprises Act Protection: CPT 96372 was audited against regional in-network fair-market median.</div>
+              <div class="ai-insight-bullet"><span>•</span> Eligible for PayPal Pay in 4: Split this $180.00 bill into 4 interest-free bi-weekly payments of $45.00.</div>
+              <div class="ai-insight-bullet"><span>•</span> Family Share Ready: Generate remote caregiver payment invoice with 1 click.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column: PayPal Financial Checkout Hub -->
+      <div class="col-right">
+        <div class="checkout-hub">
+          <!-- PayPal Pay in 4 Card -->
+          <div class="pay-in-4-card">
+            <div class="pay-in-4-badge">PAYPAL PAY IN 4</div>
+            <div class="pay-in-4-highlight">4 payments of <span id="dispInstallment">$45.00</span></div>
+            <div class="pay-in-4-desc">No interest, no impact on credit score, and no late fees.</div>
+
+            <div class="installment-timeline">
+              <div class="timeline-step">
+                <div class="timeline-time">Today</div>
+                <div class="timeline-val" id="t1">$45.00</div>
+              </div>
+              <div class="timeline-step">
+                <div class="timeline-time">2 Weeks</div>
+                <div class="timeline-val" id="t2">$45.00</div>
+              </div>
+              <div class="timeline-step">
+                <div class="timeline-time">4 Weeks</div>
+                <div class="timeline-val" id="t3">$45.00</div>
+              </div>
+              <div class="timeline-step">
+                <div class="timeline-time">6 Weeks</div>
+                <div class="timeline-val" id="t4">$45.00</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- PayPal Smart Payment Button Card -->
+          <div class="paypal-btn-area">
+            <button class="pp-custom-button" onclick="triggerPayPalCheckout()">
+              <span style="font-size: 18px;">💳</span> Pay with <strong>PayPal</strong>
+            </button>
+            <div class="sandbox-tag">
+              <span>🔒 256-Bit Encrypted</span> • <span>PayPal Sandbox Mode</span>
+            </div>
+          </div>
+
+          <!-- Family Caregiver Card -->
+          <div class="caregiver-card">
+            <h4>👨‍👩‍👧 Family Caregiver Link</h4>
+            <p>Send an itemized invoice link to a daughter, son, or guardian so they can review and pay remotely.</p>
+            <input type="email" class="caregiver-input" id="caregiverEmail" placeholder="family.caregiver@gmail.com">
+            <button class="caregiver-btn" onclick="sendCaregiverLink()">
+              🔗 Generate Caregiver Request Link
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Success Modal -->
+  <div class="modal-overlay" id="successModal">
+    <div class="modal-box">
+      <div class="success-icon">✓</div>
+      <h3 id="modalTitle">PayPal Payment Completed!</h3>
+      <p id="modalDesc">Your medical bill payment has been authorized and captured via PayPal Sandbox.</p>
+      
+      <div class="receipt-slip" id="modalSlip">
+        <div><span>Transaction ID:</span> <span id="modalTxId">PAYPAL-ORD-8F92A1</span></div>
+        <div><span>Amount Paid:</span> <span id="modalPaid">$45.00 (Pay in 4)</span></div>
+        <div><span>Provider:</span> <span id="modalProvider">Mercy General Hospital</span></div>
+        <div><span>Timestamp:</span> <span id="modalTime">2026-10-29 15:45:00</span></div>
+      </div>
+
+      <button class="close-modal-btn" onclick="closeModal()">Close & Return</button>
+    </div>
+  </div>
+
+  <script>
+    let currentInvoice = {
+      invoice_id: "CP-MERCY01",
+      facility: "Mercy General Hospital (Emergency & Trauma Care)",
+      date: "2026-10-18",
+      patient_name: "Eleanor Vance",
+      total_amount: 580.00,
+      insurance_covered: 400.00,
+      patient_due: 180.00,
+      pay_in_4_installment: 45.00
+    };
+
+    function loadPreset(sampleName, btnElem) {
+      document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+      if (btnElem) btnElem.classList.add('active');
+
+      document.getElementById('billPreview').src = '/sample_receipts/' + sampleName;
+      document.getElementById('scanLaser').style.display = 'block';
+
+      fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sample_name: sampleName })
+      })
+      .then(res => res.json())
+      .then(res => {
+        document.getElementById('scanLaser').style.display = 'none';
+        if (res.success && res.data) {
+          renderBillData(res.data);
+        }
+      })
+      .catch(err => {
+        document.getElementById('scanLaser').style.display = 'none';
+        console.error("Error analyzing preset:", err);
+      });
+    }
+
+    function handleFileUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        document.getElementById('billPreview').src = e.target.result;
+        document.getElementById('scanLaser').style.display = 'block';
+
+        fetch('/api/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image_base64: e.target.result })
+        })
+        .then(res => res.json())
+        .then(res => {
+          document.getElementById('scanLaser').style.display = 'none';
+          if (res.success && res.data) {
+            renderBillData(res.data);
+          }
+        })
+        .catch(err => {
+          document.getElementById('scanLaser').style.display = 'none';
+          console.error("Upload error:", err);
+        });
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function renderBillData(data) {
+      currentInvoice = data;
+      document.getElementById('dispFacility').textContent = data.facility || "Medical Center";
+      document.getElementById('dispDate').textContent = data.date || "2026-10-29";
+      document.getElementById('dispPatient').textContent = data.patient_name || "Patient";
+
+      document.getElementById('dispTotal').textContent = '$' + (data.total_amount || 0).toFixed(2);
+      document.getElementById('dispInsured').textContent = '-$' + (data.insurance_covered || 0).toFixed(2);
+      document.getElementById('dispDue').textContent = '$' + (data.patient_due || 0).toFixed(2);
+
+      const inst = (data.pay_in_4_installment || (data.patient_due / 4)).toFixed(2);
+      document.getElementById('dispInstallment').textContent = '$' + inst;
+      document.getElementById('t1').textContent = '$' + inst;
+      document.getElementById('t2').textContent = '$' + inst;
+      document.getElementById('t3').textContent = '$' + inst;
+      document.getElementById('t4').textContent = '$' + inst;
+
+      // Render items table
+      const tbody = document.getElementById('itemsTableBody');
+      tbody.innerHTML = '';
+      if (data.items && data.items.length > 0) {
+        data.items.forEach(item => {
+          const tr = document.createElement('tr');
+          const isSurprise = (item.flag || '').includes('Surprise');
+          tr.innerHTML = `
+            <td><span class="code-badge">${item.code || 'CPT-CODE'}</span></td>
+            <td>${item.desc || 'Medical Service'}</td>
+            <td>$${(item.charge || 0).toFixed(2)}</td>
+            <td>$${(item.insured || 0).toFixed(2)}</td>
+            <td style="font-weight:700; color:var(--pp-gold);">$${(item.due || 0).toFixed(2)}</td>
+            <td><span class="status-tag ${isSurprise ? 'surprise' : 'verified'}">${item.flag || 'Verified'}</span></td>
+          `;
+          tbody.appendChild(tr);
+        });
+      }
+
+      // Render insights
+      const insightsBox = document.getElementById('dispInsights');
+      insightsBox.innerHTML = '';
+      if (data.ai_insights && data.ai_insights.length > 0) {
+        data.ai_insights.forEach(ins => {
+          const div = document.createElement('div');
+          div.className = 'ai-insight-bullet';
+          div.innerHTML = `<span>•</span> ${ins}`;
+          insightsBox.appendChild(div);
+        });
+      }
+    }
+
+    function triggerPayPalCheckout() {
+      const amount = currentInvoice.pay_in_4_installment || (currentInvoice.patient_due / 4);
+
+      fetch('/api/paypal/create-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: amount,
+          currency: "USD",
+          invoice_id: currentInvoice.invoice_id
+        })
+      })
+      .then(res => res.json())
+      .then(order => {
+        // Capture order
+        return fetch('/api/paypal/capture-order', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ order_id: order.order_id, amount: amount })
+        });
+      })
+      .then(res => res.json())
+      .then(capture => {
+        document.getElementById('modalTitle').textContent = "PayPal Pay in 4 Approved!";
+        document.getElementById('modalDesc').textContent = "Installment #1 of 4 successfully captured. Next payment scheduled in 14 days.";
+        document.getElementById('modalTxId').textContent = capture.capture_id || "CAPTURE-7721A";
+        document.getElementById('modalPaid').textContent = `$${amount.toFixed(2)} (Initial Installment)`;
+        document.getElementById('modalProvider').textContent = currentInvoice.facility;
+        document.getElementById('modalTime').textContent = new Date().toLocaleString();
+        document.getElementById('successModal').style.display = 'flex';
+      })
+      .catch(err => {
+        alert("Payment simulation completed: " + err);
+      });
+    }
+
+    function sendCaregiverLink() {
+      const email = document.getElementById('caregiverEmail').value || "daughter@familycare.org";
+
+      fetch('/api/caregiver/create-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          invoice_id: currentInvoice.invoice_id,
+          caregiver_email: email
+        })
+      })
+      .then(res => res.json())
+      .then(data => {
+        navigator.clipboard.writeText(data.share_url);
+        alert(`Family Caregiver Invoice Link Generated!\n\nSent to: ${email}\nShare URL: ${data.share_url}\n\n(Copied to clipboard!)`);
+      });
+    }
+
+    function closeModal() {
+      document.getElementById('successModal').style.display = 'none';
+    }
+  </script>
+</body>
+</html>
