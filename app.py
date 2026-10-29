@@ -10,14 +10,25 @@ import json
 import os
 import re
 import secrets
+import threading
 import time
 import urllib.parse
 import urllib.request
 import uuid
+from decimal import Decimal, ROUND_HALF_UP
 
 PORT = 8050
 HOST = "127.0.0.1"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Concurrency & Mutex Locks for Authoritative Financial Ledger
+LEDGER_LOCK = threading.RLock()
+CAREGIVER_TOKENS = {}      # bearer token -> invoice_id mapping
+ACTIVE_INVOICE_ORDERS = {} # invoice_id -> {"order_id", "amount", "mode", "created_time"}
+
+def to_money(val):
+    """Accurate decimal quantization for healthcare billing invariants."""
+    return float(Decimal(str(val or 0.0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 # 1. API Configuration & Environment
 ENV_PATH = os.path.join(BASE_DIR, ".env")
@@ -147,6 +158,7 @@ def create_paypal_order(amount, currency="USD", invoice_id="", payment_mode="ful
     if token:
         try:
             url = f"{PAYPAL_API_BASE}/v2/checkout/orders"
+            idempotency_key = f"{invoice_id}-{payment_mode}-{uuid.uuid4()}"
             payload = {
                 "intent": "CAPTURE",
                 "purchase_units": [
@@ -171,20 +183,22 @@ def create_paypal_order(amount, currency="USD", invoice_id="", payment_mode="ful
                 headers={
                     "Authorization": f"Bearer {token}",
                     "Content-Type": "application/json",
-                    "Prefer": "return=representation"
+                    "Prefer": "return=representation",
+                    "PayPal-Request-Id": idempotency_key
                 }
             )
             with urllib.request.urlopen(req, timeout=12) as resp:
                 res_data = json.loads(resp.read().decode())
                 order_id = res_data.get("id")
                 if order_id:
-                    ORDER_TO_INVOICE[order_id] = {
-                        "invoice_id": invoice_id,
-                        "amount": amount,
-                        "currency": currency,
-                        "payment_mode": payment_mode,
-                        "created_at": time.strftime("%Y-%m-%d %H:%M:%S")
-                    }
+                    with LEDGER_LOCK:
+                        ORDER_TO_INVOICE[order_id] = {
+                            "invoice_id": invoice_id,
+                            "amount": amount,
+                            "currency": currency,
+                            "payment_mode": payment_mode,
+                            "created_at": time.strftime("%Y-%m-%d %H:%M:%S")
+                        }
                 return {
                     "success": True,
                     "order_id": order_id,
@@ -221,7 +235,8 @@ def capture_paypal_order(order_id, amount=0.0):
                 headers={
                     "Authorization": f"Bearer {token}",
                     "Content-Type": "application/json",
-                    "Prefer": "return=representation"
+                    "Prefer": "return=representation",
+                    "PayPal-Request-Id": order_id
                 }
             )
             with urllib.request.urlopen(req, timeout=12) as resp:
@@ -252,34 +267,49 @@ def capture_paypal_order(order_id, amount=0.0):
 
                 captured_amount = float(cap.get("amount", {}).get("value", amount))
 
-                # Update authoritative invoice ledger state
-                order_meta = ORDER_TO_INVOICE.get(order_id, {})
-                invoice_id = order_meta.get("invoice_id")
-                payment_mode = order_meta.get("payment_mode", "full")
-                settlement_status = "SETTLED_FULL"
+                # Update authoritative invoice ledger state with Mutex Lock
+                with LEDGER_LOCK:
+                    order_meta = ORDER_TO_INVOICE.get(order_id, {})
+                    invoice_id = order_meta.get("invoice_id")
+                    payment_mode = order_meta.get("payment_mode", "full")
+                    settlement_status = "SETTLED_FULL"
 
-                if invoice_id and invoice_id in INVOICE_STORE:
-                    inv = INVOICE_STORE[invoice_id]
-                    if payment_mode == "verified_only":
-                        settlement_status = "PARTIALLY_SETTLED_DISPUTE_HELD"
-                        inv["status"] = settlement_status
-                        inv["settled_portion"] = captured_amount
-                        inv["remaining_disputed_balance"] = round(float(inv.get("disputed_due", 0.0)), 2)
-                    elif payment_mode == "family_split":
-                        settlement_status = "FAMILY_CONTRIBUTION_RECORDED"
-                        prior_paid = float(inv.get("family_contributions_total", 0.0))
-                        new_total = prior_paid + captured_amount
-                        inv["family_contributions_total"] = round(new_total, 2)
-                        rem = max(0.0, float(inv.get("patient_due", 0.0)) - new_total)
-                        inv["remaining_patient_due"] = round(rem, 2)
-                        inv["status"] = "SETTLED_FULL" if rem <= 0.01 else "PARTIALLY_SETTLED"
-                    else:
-                        settlement_status = "PAID_IN_FULL"
-                        inv["status"] = settlement_status
-                        inv["remaining_patient_due"] = 0.0
+                    if invoice_id and invoice_id in INVOICE_STORE:
+                        inv = INVOICE_STORE[invoice_id]
+                        # Double capture guard: if already settled, reject replay
+                        if inv.get("status") in ("PAID_IN_FULL", "SETTLED_FULL") and float(inv.get("remaining_patient_due", 0.0)) <= 0.01:
+                            return {
+                                "success": False,
+                                "order_id": order_id,
+                                "status": "ALREADY_SETTLED",
+                                "error": f"Invoice {invoice_id} is already settled in full. Duplicate capture blocked."
+                            }
 
-                    inv["last_capture_id"] = cap_id
-                    inv["paid_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+                        if payment_mode == "verified_only":
+                            settlement_status = "PARTIALLY_SETTLED_DISPUTE_HELD"
+                            inv["status"] = settlement_status
+                            inv["settled_portion"] = to_money(captured_amount)
+                            inv["verified_due"] = 0.0  # Zero out verified copay to prevent repeat payments
+                            rem = max(0.0, float(inv.get("disputed_due", 0.0)))
+                            inv["remaining_patient_due"] = to_money(rem)
+                            inv["remaining_disputed_balance"] = to_money(rem)
+                        elif payment_mode == "family_split":
+                            settlement_status = "FAMILY_CONTRIBUTION_RECORDED"
+                            prior_paid = float(inv.get("family_contributions_total", 0.0))
+                            new_total = to_money(prior_paid + captured_amount)
+                            inv["family_contributions_total"] = new_total
+                            rem = max(0.0, float(inv.get("patient_due", 0.0)) - new_total)
+                            inv["remaining_patient_due"] = to_money(rem)
+                            inv["status"] = "SETTLED_FULL" if rem <= 0.01 else "PARTIALLY_SETTLED"
+                        else:
+                            settlement_status = "PAID_IN_FULL"
+                            inv["status"] = settlement_status
+                            inv["remaining_patient_due"] = 0.0
+                            inv["verified_due"] = 0.0
+
+                        inv["last_capture_id"] = cap_id
+                        inv["paid_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+                        ACTIVE_INVOICE_ORDERS.pop(invoice_id, None)
 
                 return {
                     "success": True,
@@ -363,6 +393,57 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
                 "paypal_live_credentials": bool(PAYPAL_CLIENT_SECRET and PAYPAL_CLIENT_ID not in ("sb", "")),
                 "nebius_api_live": bool(NEBIUS_API_KEY)
             })
+            return
+
+        if clean_path.startswith("api/caregiver-invoice/"):
+            cg_token = clean_path.replace("api/caregiver-invoice/", "").split("?")[0]
+            with LEDGER_LOCK:
+                inv_id = CAREGIVER_TOKENS.get(cg_token)
+                if not inv_id or inv_id not in INVOICE_STORE:
+                    self.send_json({"success": False, "error": "Invalid or expired caregiver token", "message": "Link has expired or does not exist."}, status=404)
+                    return
+                raw_inv = INVOICE_STORE[inv_id]
+                # Strict HIPAA Safe Harbor (45 CFR § 164.514) Allowlist-Only Projection:
+                # 1. Year-only service date (month/day strictly redacted)
+                raw_date = str(raw_inv.get("date", "2026"))
+                year_only = raw_date[:4] + "-XX-XX (HIPAA Safe Harbor Redacted)"
+                
+                # 2. Fully de-identified clinical items (no CPT, NDC, or medical condition codes)
+                safe_items = []
+                for idx, it in enumerate(raw_inv.get("items", [])):
+                    safe_items.append({
+                        "code": f"HIPAA-SAFE-0{idx+1}",
+                        "desc": "Redacted Healthcare Clinical Service (Safe Harbor Compliant)",
+                        "charge": it.get("charge", 0.0),
+                        "insured": it.get("insured", 0.0),
+                        "due": it.get("due", 0.0),
+                        "flag": "Caregiver Contribution View"
+                    })
+                
+                safe_inv = {
+                    "invoice_id": inv_id,
+                    "caregiver_token": cg_token,
+                    "facility": "Verified Healthcare Facility (HIPAA Redacted)",
+                    "date": year_only,
+                    "currency": raw_inv.get("currency", "USD"),
+                    "patient_name": "Protected Patient (HIPAA Safe Harbor)",
+                    "total_amount": raw_inv.get("total_amount", 0.0),
+                    "insurance_covered": raw_inv.get("insurance_covered", 0.0),
+                    "patient_due": raw_inv.get("remaining_patient_due", raw_inv.get("patient_due", 0.0)),
+                    "verified_due": raw_inv.get("verified_due", 0.0),
+                    "disputed_due": raw_inv.get("disputed_due", 0.0),
+                    "remaining_patient_due": raw_inv.get("remaining_patient_due", raw_inv.get("patient_due", 0.0)),
+                    "pay_in_4_eligible": raw_inv.get("pay_in_4_eligible", False),
+                    "pay_in_4_installment": raw_inv.get("pay_in_4_installment", 0.0),
+                    "status": raw_inv.get("status", "UNPAID"),
+                    "hipaa_privacy_mode": True,
+                    "items": safe_items,
+                    "ai_insights": [
+                        "🛡️ HIPAA Safe Harbor Active: Patient name, clinical diagnoses, and service dates (month/day) strictly de-identified.",
+                        "Direct PayPal Settlement: Family members contribute securely without accessing protected health records."
+                    ]
+                }
+            self.send_json({"success": True, "invoice": safe_inv, "privacy_mode": True})
             return
 
         if clean_path.startswith("api/invoice/"):
@@ -591,69 +672,81 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
 
         invoice_id = str(body.get("invoice_id", "")).strip()
         
-        # Strict server price authority: invoice MUST exist in authorized INVOICE_STORE!
-        if not invoice_id or invoice_id not in INVOICE_STORE:
-            self.send_json({
-                "success": False,
-                "error": "Invoice Not Found",
-                "message": f"Cannot create order: invoice '{invoice_id}' does not exist in authorized ledger. Client price injection blocked."
-            }, status=404)
-            return
-
-        record = INVOICE_STORE[invoice_id]
-        current_status = record.get("status", "UNPAID")
-        if current_status in ("PAID_IN_FULL", "SETTLED_FULL"):
-            self.send_json({
-                "success": False,
-                "error": "Invoice Already Settled",
-                "message": f"Invoice '{invoice_id}' has already been paid and settled. Replay payments are blocked."
-            }, status=400)
-            return
-
-        server_due = float(record.get("patient_due", 0.0))
-        currency = str(record.get("currency", "USD")).strip() or "USD"
-
-        if server_due <= 0.0:
-            self.send_json({
-                "success": False,
-                "error": "Zero Balance",
-                "message": "This invoice balance is $0.00 and requires no payment."
-            }, status=400)
-            return
-
-        mode = str(body.get("mode", "full")).strip().lower()
-
-        # Server-enforced amount authority based on payment mode:
-        if mode == "verified_only":
-            amount = float(record.get("verified_due", server_due))
-            if amount <= 0.0:
+        with LEDGER_LOCK:
+            # Strict server price authority: invoice MUST exist in authorized INVOICE_STORE!
+            if not invoice_id or invoice_id not in INVOICE_STORE:
                 self.send_json({
                     "success": False,
-                    "error": "No Verified Balance",
-                    "message": "All line items are currently under dispute hold. No verified copay balance is due."
-                }, status=400)
+                    "error": "Invoice Not Found",
+                    "message": f"Cannot create order: invoice '{invoice_id}' does not exist in authorized ledger. Client price injection blocked."
+                }, status=404)
                 return
-        elif mode == "family_split":
-            try:
-                split_val = float(body.get("split_amount", 0.0))
-            except (ValueError, TypeError):
-                split_val = 0.0
-            rem_due = float(record.get("remaining_patient_due", server_due))
-            if split_val <= 0.0 or split_val > rem_due + 0.01:
+
+            record = INVOICE_STORE[invoice_id]
+            current_status = record.get("status", "UNPAID")
+            server_due = to_money(record.get("patient_due", 0.0))
+            rem_due = to_money(record.get("remaining_patient_due", server_due))
+
+            if current_status in ("PAID_IN_FULL", "SETTLED_FULL") or rem_due <= 0.01:
                 self.send_json({
                     "success": False,
-                    "error": "Invalid Contribution Amount",
-                    "message": f"Family split contribution must be between $1.00 and remaining balance of ${rem_due:.2f}."
+                    "error": "Invoice Already Settled",
+                    "message": f"Invoice '{invoice_id}' has already been paid and settled. Replay payments are blocked."
                 }, status=400)
                 return
-            amount = round(split_val, 2)
-        else:
-            # Default authoritative full settlement:
-            # Note: PayPal Pay Later / Pay in 4 is chosen by the buyer inside PayPal's secure checkout.
-            # The merchant order is always created for the full authorized balance.
-            amount = round(server_due, 2)
+
+            currency = str(record.get("currency", "USD")).strip() or "USD"
+            mode = str(body.get("mode", "full")).strip().lower()
+
+            # Server-enforced amount authority based on payment mode:
+            if mode == "verified_only":
+                amount = to_money(record.get("verified_due", 0.0))
+                if amount <= 0.0:
+                    self.send_json({
+                        "success": False,
+                        "error": "No Verified Balance",
+                        "message": "Verified balance is $0.00 (already settled or under dispute hold)."
+                    }, status=400)
+                    return
+            elif mode == "family_split":
+                try:
+                    split_val = float(body.get("split_amount", 0.0))
+                except (ValueError, TypeError):
+                    split_val = 0.0
+                if split_val < 1.00 or split_val > rem_due + 0.01:
+                    self.send_json({
+                        "success": False,
+                        "error": "Invalid Contribution Amount",
+                        "message": f"Family split contribution must be between $1.00 and remaining balance of ${rem_due:.2f}."
+                    }, status=400)
+                    return
+                amount = to_money(split_val)
+            else:
+                amount = to_money(rem_due)
+
+            # Active pending order idempotency guard to prevent concurrent double-order creation
+            active_order = ACTIVE_INVOICE_ORDERS.get(invoice_id)
+            if active_order and active_order.get("mode") == mode and abs(active_order.get("amount", 0.0) - amount) < 0.01 and (time.time() - active_order.get("created_time", 0)) < 60:
+                self.send_json({
+                    "success": True,
+                    "order_id": active_order.get("order_id"),
+                    "status": "CREATED",
+                    "authorized_amount": active_order.get("amount"),
+                    "payment_mode": active_order.get("mode"),
+                    "mode": "existing_active_order",
+                    "message": "Reusing existing active checkout order to prevent double-order creation"
+                })
+                return
 
         result = create_paypal_order(amount, currency, invoice_id, payment_mode=mode)
+        if result.get("success") and result.get("order_id"):
+            with LEDGER_LOCK:
+                ACTIVE_INVOICE_ORDERS[invoice_id] = {
+                    "order_id": result["order_id"],
+                    "amount": amount,
+                    "mode": mode,
+                    "created_time": time.time()
+                }
         self.send_json(result)
 
     def handle_capture_order(self, body):
@@ -677,29 +770,36 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
         invoice_id = str(body.get("invoice_id", "")).strip()
         caregiver_email = str(body.get("caregiver_email", "")).strip() or "family@example.com"
 
-        if not invoice_id or invoice_id not in INVOICE_STORE:
-            self.send_json({
-                "success": False,
-                "error": "Invoice Not Found",
-                "message": f"Cannot generate caregiver link: invoice '{invoice_id}' does not exist in active ledger."
-            }, status=404)
-            return
+        with LEDGER_LOCK:
+            if not invoice_id or invoice_id not in INVOICE_STORE:
+                self.send_json({
+                    "success": False,
+                    "error": "Invoice Not Found",
+                    "message": f"Cannot generate caregiver link: invoice '{invoice_id}' does not exist in active ledger."
+                }, status=404)
+                return
 
-        record = INVOICE_STORE[invoice_id]
-        host_header = self.headers.get("Host", f"{HOST}:{PORT}")
-        share_url = f"http://{host_header}/?invoice={invoice_id}&mode=caregiver"
-        self.send_json({
-            "success": True,
-            "invoice_id": invoice_id,
-            "share_url": share_url,
-            "caregiver_email": caregiver_email,
-            "patient_due": float(record.get("patient_due", 0.0)),
-            "remaining_patient_due": float(record.get("remaining_patient_due", record.get("patient_due", 0.0))),
-            "verified_due": float(record.get("verified_due", record.get("patient_due", 0.0))),
-            "pay_in_4_eligible": bool(record.get("pay_in_4_eligible", False)),
-            "pay_in_4_installment": float(record.get("pay_in_4_installment", 0.0)),
-            "message": "Caregiver privacy-preserving payment request generated successfully."
-        })
+            record = INVOICE_STORE[invoice_id]
+            # Cryptographically isolated caregiver bearer token (HIPAA Safe Harbor)
+            cg_token = f"CG-{secrets.token_urlsafe(16)}"
+            CAREGIVER_TOKENS[cg_token] = invoice_id
+            share_url = f"http://{HOST}:{PORT}/?cg_token={cg_token}"
+
+            self.send_json({
+                "success": True,
+                "token": cg_token,
+                "invoice_id": invoice_id,
+                "share_url": share_url,
+                "caregiver_email": caregiver_email,
+                "patient_name_masked": "Protected Patient (HIPAA Safe Harbor)",
+                "patient_due": float(record.get("patient_due", 0.0)),
+                "remaining_patient_due": float(record.get("remaining_patient_due", record.get("patient_due", 0.0))),
+                "verified_due": float(record.get("verified_due", record.get("patient_due", 0.0))),
+                "pay_in_4_eligible": bool(record.get("pay_in_4_eligible", False)),
+                "pay_in_4_installment": float(record.get("pay_in_4_installment", 0.0)),
+                "hipaa_safe_harbor": True,
+                "message": "Caregiver privacy-preserving payment link generated with decoupled bearer token."
+            })
 
     def handle_appeal_generate(self, body):
         if not isinstance(body, dict):

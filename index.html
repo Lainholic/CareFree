@@ -1972,7 +1972,8 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           invoice_id: currentInvoice.invoice_id,
-          caregiver_email: email
+          caregiver_email: email,
+          split_percent: currentCaregiverSplitPercent
         })
       })
       .then(res => res.json())
@@ -1980,8 +1981,12 @@
         if (!data.success) {
           throw new Error(data.message || data.error || "Failed to create caregiver link");
         }
-        navigator.clipboard.writeText(data.share_url);
-        alert(`🛡️ Family Caregiver Payment Link Generated!\n\nSent to: ${email}\nShare URL: ${data.share_url}\n\n(HIPAA Privacy Shield active • Copied to clipboard!)`);
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(data.share_url).catch(() => fallbackCopyText(data.share_url));
+        } else {
+          fallbackCopyText(data.share_url);
+        }
+        alert(`🛡️ Family Caregiver Payment Link Generated!\n\nSent to: ${email}\nDecoupled Safe Harbor URL: ${data.share_url}\n\n(HIPAA Privacy Shield active • Copied to clipboard!)`);
       })
       .catch(err => {
         alert("Notice: " + err.message);
@@ -2096,18 +2101,31 @@
             label: 'paypal'
           },
           createOrder: function(data, actions) {
-            const activeAmt = (currentSettleMode === 'verified_only')
+            let activeAmt = (currentSettleMode === 'verified_only')
               ? (currentInvoice.verified_due || 150.00)
-              : (currentInvoice.patient_due || 180.00);
+              : (currentInvoice.remaining_patient_due || currentInvoice.patient_due || 180.00);
+            let reqMode = currentSettleMode;
+            let splitAmt = undefined;
+
+            if (currentCaregiverSplitPercent < 100) {
+              reqMode = 'family_split';
+              splitAmt = Math.max(1.00, Number((activeAmt * (currentCaregiverSplitPercent / 100)).toFixed(2)));
+              activeAmt = splitAmt;
+            }
+
+            const payload = {
+              invoice_id: currentInvoice.invoice_id,
+              mode: reqMode,
+              amount: activeAmt
+            };
+            if (splitAmt !== undefined) {
+              payload.split_amount = splitAmt;
+            }
 
             return fetch('/api/paypal/create-order', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                invoice_id: currentInvoice.invoice_id,
-                mode: currentSettleMode,
-                amount: activeAmt
-              })
+              body: JSON.stringify(payload)
             })
             .then(res => res.json())
             .then(orderData => {
@@ -2134,12 +2152,12 @@
 
               if (isVerifiedOnly) {
                 document.getElementById('modalTitle').textContent = "⚖️ Verified Services Settled!";
-                document.getElementById('modalDesc').textContent = `Authorized copay of $${capturedAmt.toFixed(2)} captured via PayPal. Disputed balance of $${disputedAmt.toFixed(2)} is officially placed on administrative hold under US No Surprises Act.`;
+                document.getElementById('modalDesc').textContent = `Authorized copay of $${capturedAmt.toFixed(2)} captured via PayPal. Disputed balance of $${disputedAmt.toFixed(2)} is formally placed on administrative dispute hold under 45 CFR § 149.410 (Draft Pending Facility Adjudication).`;
                 document.getElementById('modalPaid').textContent = `$${capturedAmt.toFixed(2)} (Verified Portion Settled)`;
               } else {
                 document.getElementById('modalTitle').textContent = "PayPal Payment Completed!";
                 document.getElementById('modalDesc').textContent = `Authorized copay of $${capturedAmt.toFixed(2)} settled via PayPal Sandbox Orders v2 (Eligible for 4 interest-free payments via PayPal Pay Later).`;
-                document.getElementById('modalPaid').textContent = `$${capturedAmt.toFixed(2)} (Full Copay Settled)`;
+                document.getElementById('modalPaid').textContent = `$${capturedAmt.toFixed(2)} (Copay Settled)`;
               }
 
               document.getElementById('modalTxId').textContent = captureData.capture_id;
@@ -2164,10 +2182,33 @@
     // Check URL parameters for Caregiver Mode & Auto-load default invoice
     window.addEventListener('DOMContentLoaded', () => {
       const urlParams = new URLSearchParams(window.location.search);
+      const cgToken = urlParams.get('cg_token');
       const inv = urlParams.get('invoice');
       const mode = urlParams.get('mode');
 
-      if (inv) {
+      if (cgToken) {
+        // High-entropy decoupled caregiver bearer token (Safe Harbor compliant)
+        fetch('/api/caregiver-invoice/' + encodeURIComponent(cgToken))
+          .then(res => res.json())
+          .then(res => {
+            if (res.success && res.invoice) {
+              renderBillData(res.invoice);
+              const hipaaEl = document.getElementById('hipaaBanner');
+              if (hipaaEl) hipaaEl.style.display = 'flex';
+              const settleSel = document.getElementById('settleModeSelector');
+              if (settleSel) settleSel.style.display = 'none';
+              const cgCard = document.getElementById('caregiverShareCard');
+              if (cgCard) cgCard.style.display = 'none';
+            } else {
+              alert("Notice: Caregiver link is expired or invalid.");
+              loadPreset('us_hospital_bill.png');
+            }
+          })
+          .catch(e => {
+            console.error(e);
+            loadPreset('us_hospital_bill.png');
+          });
+      } else if (inv) {
         fetch('/api/invoice/' + inv + (mode ? `?mode=${mode}` : ''))
           .then(res => res.json())
           .then(res => {
