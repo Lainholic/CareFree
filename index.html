@@ -1504,7 +1504,7 @@
                 <span class="appeal-shield">⚖️</span>
                 <span id="appealBannerTitle">No Surprises Act Dispute Assistant</span>
               </div>
-              <p id="appealBannerDesc">Detected potential balance billing (CPT 96372). Generate a legally binding formal appeal letter under 45 CFR § 149.410 to dispute out-of-network balance charges.</p>
+              <p id="appealBannerDesc">Detected potential balance billing (CPT 96372). Generate an audit-ready formal inquiry letter under 45 CFR § 149.410 to dispute out-of-network balance charges.</p>
             </div>
             <button class="appeal-btn" id="btnGenAppeal" onclick="openAppealModal()">
               📄 Generate Dispute Letter
@@ -1539,6 +1539,9 @@
                 <div class="timeline-time">6 Weeks</div>
                 <div class="timeline-val" id="t4">$45.00</div>
               </div>
+            </div>
+            <div class="pay-in-4-disclaimer" id="payIn4Disclaimer" style="font-size: 11px; color: #94a3b8; margin-top: 12px; line-height: 1.4; text-align: center; border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 8px;">
+              ℹ️ Estimated installment. Eligibility and final terms are determined by PayPal at checkout.
             </div>
           </div>
 
@@ -1611,6 +1614,10 @@
         <button class="modal-close-x" onclick="closeAppealModal()" title="Close">&times;</button>
       </div>
 
+      <div class="legal-disclaimer-box" id="appealDisclaimer" style="margin-bottom: 12px; padding: 10px 14px; background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 8px; font-size: 11px; line-height: 1.5; color: #fde68a;">
+        ⚠️ <strong>Notice:</strong> AI-generated draft for patient review. Not legal, medical, or tax/financial advice. CMS fee schedule is a Medicare reference benchmark; QPA must be calculated by your plan/issuer under the No Surprises Act.
+      </div>
+
       <div class="letter-sheet" id="letterSheet">
         <pre id="appealLetterText">Generating dispute letter...</pre>
       </div>
@@ -1678,10 +1685,12 @@
         mobGalleryBtn: "🖼️ Photo Gallery",
         mobCameraBtn: "📷 Snap Camera",
         appealBannerTitle: "No Surprises Act Dispute Assistant",
-        appealBannerDesc: "Detected potential balance billing (CPT 96372). Generate a legally binding formal appeal letter under 45 CFR § 149.410 to dispute out-of-network balance charges.",
+        appealBannerDesc: "Detected potential balance billing (CPT 96372). Generate an audit-ready formal inquiry letter under 45 CFR § 149.410 to dispute out-of-network balance charges.",
         btnGenAppeal: "📄 Generate Dispute Letter",
         appealModalTitle: "Official Dispute Letter Preview",
         appealModalSub: "US No Surprises Act (45 CFR § 149.410 / § 149.420)",
+        appealDisclaimer: "⚠️ Notice: AI-generated draft for patient review. Not legal, medical, or tax/financial advice. CMS fee schedule is a Medicare reference benchmark; QPA must be calculated by your plan/issuer under the No Surprises Act.",
+        payIn4Disclaimer: "ℹ️ Estimated installment. Eligibility and final terms are determined by PayPal at checkout.",
         btnCopyAppeal: "📋 Copy to Clipboard",
         btnPrintAppeal: "🖨️ Print / Save PDF",
         btnCloseAppeal: "Close",
@@ -1706,10 +1715,12 @@
         mobGalleryBtn: "🖼️ 갤러리",
         mobCameraBtn: "📷 카메라",
         appealBannerTitle: "미국 부당 의료비 이의신청 AI 지원",
-        appealBannerDesc: "과다/부당 청구(CPT 96372) 감지됨. 미국 연방법 No Surprises Act(45 CFR § 149.410)에 의거한 공식 병원 이의신청서를 즉시 생성합니다.",
+        appealBannerDesc: "과다/부당 청구(CPT 96372) 감지됨. 미국 연방법 No Surprises Act(45 CFR § 149.410)에 의거한 공식 병원 이의신청 질의서를 즉시 생성합니다.",
         btnGenAppeal: "📄 공식 이의신청서 생성",
         appealModalTitle: "병원 제출용 공식 이의신청서 미리보기",
         appealModalSub: "미국 No Surprises Act 법률 규격 (45 CFR § 149.410 / § 149.420)",
+        appealDisclaimer: "⚠️ 안내: 본 문서는 환자 검토용 AI 질의 초안이며 법률·의료·재무 자문이 아닙니다. CMS 수가는 메디케어 참고 기준가이며, No Surprises Act에 따른 공정지불금액(QPA)은 환자의 보험사가 직접 산출해야 합니다.",
+        payIn4Disclaimer: "ℹ️ 예상 분할 납부액입니다. 최종 자격 및 이용 조건은 결제 시 PayPal이 심사하여 결정합니다.",
         btnCopyAppeal: "📋 클립보드에 복사",
         btnPrintAppeal: "🖨️ 인쇄 / PDF 저장",
         btnCloseAppeal: "닫기",
@@ -1795,6 +1806,12 @@
 
       const apModSub = document.getElementById('appealModalSub');
       if (apModSub) apModSub.textContent = t.appealModalSub;
+
+      const apDis = document.getElementById('appealDisclaimer');
+      if (apDis && t.appealDisclaimer) apDis.textContent = t.appealDisclaimer;
+
+      const p4Dis = document.getElementById('payIn4Disclaimer');
+      if (p4Dis && t.payIn4Disclaimer) p4Dis.textContent = t.payIn4Disclaimer;
 
       const btnCp = document.getElementById('btnCopyAppeal');
       if (btnCp) btnCp.textContent = t.btnCopyAppeal;

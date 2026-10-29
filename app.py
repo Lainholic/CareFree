@@ -64,8 +64,54 @@ except Exception as e:
     print(f"[Warning] Failed to import receipt_pipeline: {e}")
     HAS_PIPELINE = False
 
-# In-memory invoice store for Caregiver Remote Payment Links
+# In-memory invoice store with durable local JSON persistence
 INVOICE_STORE = {}
+DATA_DIR = os.path.join(BASE_DIR, "_work")
+INVOICES_DB_PATH = os.path.join(DATA_DIR, "invoices_store.json")
+TOKENS_DB_PATH = os.path.join(DATA_DIR, "caregiver_tokens.json")
+
+def load_persisted_state():
+    """Restores INVOICE_STORE and CAREGIVER_TOKENS from durable local JSON storage."""
+    global INVOICE_STORE, CAREGIVER_TOKENS
+    with LEDGER_LOCK:
+        if os.path.exists(INVOICES_DB_PATH):
+            try:
+                with open(INVOICES_DB_PATH, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, dict):
+                        INVOICE_STORE.update(data)
+                        print(f"[Storage] Restored {len(data)} invoice(s) from {INVOICES_DB_PATH}")
+            except Exception as e:
+                print(f"[Warning] Failed to restore invoice store: {e}")
+
+        if os.path.exists(TOKENS_DB_PATH):
+            try:
+                with open(TOKENS_DB_PATH, "r", encoding="utf-8") as f:
+                    t_data = json.load(f)
+                    if isinstance(t_data, dict):
+                        CAREGIVER_TOKENS.update(t_data)
+                        print(f"[Storage] Restored {len(t_data)} caregiver token(s) from {TOKENS_DB_PATH}")
+            except Exception as e:
+                print(f"[Warning] Failed to restore caregiver tokens: {e}")
+
+def save_persisted_state():
+    """Atomically persists INVOICE_STORE and CAREGIVER_TOKENS to durable local storage."""
+    try:
+        os.makedirs(DATA_DIR, exist_ok=True)
+        # 1. Persist INVOICE_STORE
+        tmp_inv = INVOICES_DB_PATH + ".tmp"
+        with open(tmp_inv, "w", encoding="utf-8") as f:
+            json.dump(INVOICE_STORE, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_inv, INVOICES_DB_PATH)
+
+        # 2. Persist CAREGIVER_TOKENS
+        tmp_tok = TOKENS_DB_PATH + ".tmp"
+        with open(tmp_tok, "w", encoding="utf-8") as f:
+            json.dump(CAREGIVER_TOKENS, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_tok, TOKENS_DB_PATH)
+    except Exception as e:
+        print(f"[Warning] Failed to persist state: {e}")
+
 
 SAMPLE_DIR = os.path.join(BASE_DIR, "sample_receipts")
 
@@ -136,9 +182,9 @@ def classify_hsa_eligibility(code, desc, flag):
         )
 
     return (
-        "ELIGIBLE",
-        "Healthcare Service",
-        "Qualified healthcare expense under IRC § 213(d)"
+        "POTENTIALLY_ELIGIBLE",
+        "Healthcare Item / Service",
+        "Potentially qualified medical expense under IRC § 213(d); subject to HSA/FSA administrator substantiation."
     )
 
 def enrich_invoice_items(items):
@@ -242,7 +288,7 @@ SAMPLE_BILLS = {
             "Smart Dispute & Partial Settle: CPT 96372 flagged under No Surprises Act ($30.00 hold). Verified services ($150.00) can be settled immediately.",
             "CMS Medicare Benchmark Context: Itemized charges compared with 2026 Medicare National allowable fee schedule (e.g. CPT 96372 $24.80 benchmark vs $90.00 hospital charge).",
             "HSA/FSA Tax Substantiation Ready: 100% of patient due ($180.00) pre-screened as IRC § 213(d) qualified medical expense for IRS Pub 502 reimbursement.",
-            "PayPal Pay in 4 Available: Full $180.00 copay is eligible for 4 interest-free bi-weekly payments of $45.00 at PayPal checkout.",
+            "PayPal Pay in 4 Option: Estimated $180.00 copay split into 4 bi-weekly payments of $45.00 (Final eligibility determined by PayPal at checkout).",
             "HIPAA Caregiver View: Family members can contribute toward copays with privacy-preserving diagnostic shielding."
         ]
     },
@@ -305,7 +351,7 @@ SAMPLE_BILLS = {
         "ai_insights": [
             "HSA/FSA Tax Substantiation Allocation: $30.00 pre-screened as direct Rx qualified expense; $10.00 OTC supplement requires LMN substantiation.",
             "Co-Pay Verification: Prescription generic co-pays verified against standard Medicare Part D tier limits.",
-            "PayPal Pay in 4 Available: Total $40.00 qualifies for 4 interest-free payments of $10.00 every two weeks.",
+            "PayPal Pay in 4 Option: Estimated $40.00 total split into 4 payments of $10.00 every two weeks (Final eligibility determined by PayPal at checkout).",
             "IRS Pub 502 Ready: Printable tax substantiation slip generated upon PayPal checkout completion.",
             "Auto-Reorder & Renewal: Caregiver notified of upcoming 90-day refill timeline."
         ]
@@ -551,6 +597,7 @@ def capture_paypal_order(order_id):
                         inv["last_capture_id"] = cap_id
                         inv["paid_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
                         ACTIVE_INVOICE_ORDERS.pop(invoice_id, None)
+                        save_persisted_state()
 
                 return {
                     "success": True,
@@ -853,6 +900,7 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
             }
             with LEDGER_LOCK:
                 INVOICE_STORE[inv_id] = invoice_record
+                save_persisted_state()
             self.send_json({"success": True, "source": "sample_verified", "data": invoice_record})
             return
 
@@ -962,6 +1010,7 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
                     }
                     with LEDGER_LOCK:
                         INVOICE_STORE[inv_id] = invoice_record
+                        save_persisted_state()
                     self.send_json({"success": True, "source": "live_vision_pipeline", "data": invoice_record})
                     return
             except Exception as e:
@@ -1105,6 +1154,7 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
                 "requested_amount": req_amount,
                 "created_at": time.time()
             }
+            save_persisted_state()
             share_url = f"http://{HOST}:{PORT}/?cg_token={cg_token}"
 
             self.send_json({
@@ -1232,7 +1282,16 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
             f"Sincerely,\n\n"
             f"_________________________________________\n"
             f"{patient_name}\n"
-            f"Patient / Authorized Healthcare Representative\n"
+            f"Patient / Authorized Healthcare Representative\n\n"
+            f"================================================================================\n"
+            f"NOTICE & REGULATORY CLARIFICATION:\n"
+            f"• Informational Draft: This inquiry letter is an AI-generated draft prepared\n"
+            f"  for patient review. It does not constitute formal legal, medical, or tax advice.\n"
+            f"• CMS Benchmark vs. QPA: CMS fee schedule values referenced herein reflect federal\n"
+            f"  Medicare allowable reference rates. Under the federal No Surprises Act, the\n"
+            f"  Qualifying Payment Amount (QPA) represents median in-network contracted rates\n"
+            f"  and must be calculated by your specific health plan or issuer.\n"
+            f"================================================================================\n"
         )
 
         self.send_json({
@@ -1244,6 +1303,7 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
             "target_item_code": target_item_code,
             "letter_text": letter_text,
             "legal_statute": "US No Surprises Act (45 CFR § 149.410 / § 149.420)",
+            "disclaimer": "AI-generated draft for patient review. Not legal, medical, or tax/financial advice. CMS fee schedule is a Medicare reference benchmark; QPA must be calculated by your plan/issuer under the No Surprises Act.",
             "disputed_items_count": len(disputed_items),
             "message": "Federal billing audit and dispute letter drafted successfully."
         })
@@ -1258,6 +1318,7 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
 
 
 def run_server():
+    load_persisted_state()
     # Use ThreadingHTTPServer for asynchronous concurrent client requests
     with http.server.ThreadingHTTPServer((HOST, PORT), CarePayHandler) as httpd:
         httpd.daemon_threads = True
