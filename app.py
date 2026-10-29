@@ -207,13 +207,36 @@ def capture_paypal_order(order_id, amount=0.0):
             )
             with urllib.request.urlopen(req, timeout=12) as resp:
                 res_data = json.loads(resp.read().decode())
-                captures = res_data.get("purchase_units", [{}])[0].get("payments", {}).get("captures", [])
-                cap_id = captures[0].get("id") if captures else f"CAP-{uuid.uuid4().hex[:8].upper()}"
+                status = res_data.get("status")
+                purchase_units = res_data.get("purchase_units", [])
+                captures = purchase_units[0].get("payments", {}).get("captures", []) if purchase_units else []
+                
+                if not captures or status != "COMPLETED":
+                    return {
+                        "success": False,
+                        "order_id": order_id,
+                        "status": status or "FAILED",
+                        "error": "PayPal capture incomplete or rejected by gateway",
+                        "raw_capture": res_data
+                    }
+
+                cap = captures[0]
+                cap_id = cap.get("id")
+                if not cap_id:
+                    return {
+                        "success": False,
+                        "order_id": order_id,
+                        "status": "FAILED",
+                        "error": "No capture ID returned by PayPal Orders v2",
+                        "raw_capture": res_data
+                    }
+
                 return {
                     "success": True,
                     "capture_id": cap_id,
                     "order_id": order_id,
-                    "status": res_data.get("status", "COMPLETED"),
+                    "status": "COMPLETED",
+                    "captured_amount": float(cap.get("amount", {}).get("value", amount)),
                     "mode": "live_paypal_sandbox",
                     "raw_capture": res_data
                 }
@@ -454,26 +477,49 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
             except Exception as e:
                 print(f"[Analyze Live Pipeline Exception] {e}")
 
-        # Fallback realistic parsing response if image had no recognizable text
-        fallback_data = copy.deepcopy(SAMPLE_BILLS["us_hospital_bill.png"])
-        inv_id = f"CP-{secrets.token_hex(4).upper()}"
-        fallback_data["invoice_id"] = inv_id
-        INVOICE_STORE[inv_id] = fallback_data
-        self.send_json({"success": True, "source": "ai_structured_engine", "data": fallback_data})
+        # If OCR or sample parsing did not succeed, do NOT fake Eleanor Vance! Return a clean error.
+        self.send_json({
+            "success": False,
+            "error": "OCR Recognition Incomplete",
+            "message": "Could not extract clear medical billing items from the image. Please upload a higher resolution receipt or select a verified sample."
+        }, status=422)
 
     def handle_create_order(self, body):
-        try:
-            amount = float(body.get("amount", 45.00))
-        except (ValueError, TypeError):
-            amount = 45.00
-        currency = body.get("currency", "USD")
-        invoice_id = body.get("invoice_id", "CP-TEST")
+        if not isinstance(body, dict):
+            self.send_json({"success": False, "error": "Invalid request body: object expected"}, status=400)
+            return
 
+        invoice_id = str(body.get("invoice_id", "")).strip()
+        
+        # Server-side price authority: retrieve genuine patient due from INVOICE_STORE
+        server_due = None
+        if invoice_id in INVOICE_STORE:
+            record = INVOICE_STORE[invoice_id]
+            server_due = float(record.get("patient_due", 0.0))
+            
+        try:
+            requested_amount = float(body.get("amount", 0.0))
+        except (ValueError, TypeError):
+            requested_amount = 0.0
+
+        if server_due is not None and server_due > 0:
+            is_installment = abs(requested_amount - round(server_due / 4, 2)) < 0.02
+            amount = round(server_due / 4, 2) if is_installment else round(server_due, 2)
+        elif requested_amount > 0:
+            amount = requested_amount
+        else:
+            self.send_json({"success": False, "error": "Invalid or zero payment amount"}, status=400)
+            return
+
+        currency = str(body.get("currency", "USD")).strip() or "USD"
         result = create_paypal_order(amount, currency, invoice_id)
         self.send_json(result)
 
     def handle_capture_order(self, body):
-        order_id = body.get("order_id", "")
+        if not isinstance(body, dict):
+            self.send_json({"success": False, "error": "Invalid request body: object expected"}, status=400)
+            return
+        order_id = str(body.get("order_id", "")).strip()
         try:
             amount = float(body.get("amount", 0.0))
         except (ValueError, TypeError):
@@ -483,18 +529,22 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
         self.send_json(result)
 
     def handle_caregiver_link(self, body):
-        invoice_id = body.get("invoice_id", "")
-        caregiver_email = body.get("caregiver_email", "family@example.com")
+        if not isinstance(body, dict):
+            self.send_json({"success": False, "error": "Invalid request body: object expected"}, status=400)
+            return
 
-        if invoice_id in INVOICE_STORE:
-            record = INVOICE_STORE[invoice_id]
-        else:
-            record = copy.deepcopy(SAMPLE_BILLS["us_hospital_bill.png"])
-            invoice_id = f"CP-{secrets.token_hex(4).upper()}"
-            record["invoice_id"] = invoice_id
-            INVOICE_STORE[invoice_id] = record
+        invoice_id = str(body.get("invoice_id", "")).strip()
+        caregiver_email = str(body.get("caregiver_email", "")).strip() or "family@example.com"
 
-        # Dynamic Host based on HTTP request header (supports LAN IP / Cloud domain / Localhost)
+        if not invoice_id or invoice_id not in INVOICE_STORE:
+            self.send_json({
+                "success": False,
+                "error": "Invoice Not Found",
+                "message": f"Cannot generate caregiver link: invoice '{invoice_id}' does not exist in active ledger."
+            }, status=404)
+            return
+
+        record = INVOICE_STORE[invoice_id]
         host_header = self.headers.get("Host", f"{HOST}:{PORT}")
         share_url = f"http://{host_header}/?invoice={invoice_id}&mode=caregiver"
         self.send_json({
@@ -542,6 +592,13 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
         disputed_items = []
         if target_item_code:
             disputed_items = [it for it in items if str(it.get("code", "")).strip() == target_item_code]
+            if not disputed_items:
+                self.send_json({
+                    "success": False,
+                    "error": "Target Item Not Found",
+                    "message": f"Service code '{target_item_code}' is not listed in this billing statement."
+                }, status=422)
+                return
         
         if not disputed_items:
             disputed_items = [it for it in items if "Surprise" in it.get("flag", "") or "Benchmark" in it.get("flag", "")]
@@ -582,7 +639,7 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
             f"{scope_notice}\n\n"
             f"STATEMENT OF INQUIRY UNDER 45 CFR § 149.410 & § 149.420:\n"
             f"1. Facility & Provider Network Status: Please confirm whether all attending and ancillary clinicians rendering care at your facility were participating in-network providers with my health plan.\n"
-            f"2. Cost-Sharing Limitation: If any charges originate from out-of-network clinicians at this in-network facility without prior written consent, please ensure patient responsibility is restricted strictly to the recognized in-network cost-sharing amount or Qualifying Payment Amount (QPA).\n"
+            f"2. Cost-Sharing & Recognized Amount: If out-of-network clinicians provided services at this in-network facility without valid prior notice and consent, please explain the applicable recognized amount (including whether the Qualifying Payment Amount (QPA) was utilized as the benchmark) and confirm how my plan's in-network cost-sharing rules (deductible, copay, or coinsurance) were applied. This request does not assert that ordinary in-network copayments are unlawful.\n"
             f"3. Itemized Fee Schedule: Please furnish a fully unbundled billing statement itemizing revenue codes, HCPCS/CPT codes, and National Provider Identifiers (NPI).\n\n"
             f"REQUESTED ADMINISTRATIVE ACTIONS:\n"
             f"1. Place a temporary 30-day administrative hold on this account to suspend any automated collections or late fees while this review is conducted.\n"
