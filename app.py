@@ -410,44 +410,39 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
                     currency = parsed.get("currency", "USD")
                     raw_items = parsed.get("items", [])
 
-                    # Construct itemized CarePay billing structure
+                    # If no items could be reliably extracted, fail closed (never synthesize fake CPT codes)
+                    if not raw_items:
+                        self.send_json({
+                            "success": False,
+                            "error": "No Itemized Lines Detected",
+                            "message": "OCR transcribed text but could not parse specific medical procedure codes or fee amounts. Please provide a clearer itemized statement."
+                        }, status=422)
+                        return
+
                     items = []
                     calc_total = 0.0
                     calc_due = 0.0
                     calc_insured = 0.0
 
-                    if raw_items:
-                        for idx, it in enumerate(raw_items):
-                            amt = float(it.get("amount") or 0.0)
-                            code = it.get("code") or f"REV-0{idx+1}00"
-                            desc = it.get("name") or "Healthcare Diagnostic & Service"
-                            ins_portion = round(amt * 0.70, 2)
-                            due_portion = round(amt - ins_portion, 2)
-                            calc_total += amt
-                            calc_insured += ins_portion
-                            calc_due += due_portion
-                            items.append({
-                                "code": code,
-                                "desc": desc,
-                                "charge": amt,
-                                "insured": ins_portion,
-                                "due": due_portion,
-                                "flag": "Verified Provider Item"
-                            })
-                    else:
-                        calc_total = float(parsed.get("total") or 180.00)
-                        calc_insured = round(calc_total * 0.65, 2)
-                        calc_due = round(calc_total - calc_insured, 2)
+                    for idx, it in enumerate(raw_items):
+                        amt = float(it.get("amount") or 0.0)
+                        code = it.get("code") or f"REV-0{idx+1}00"
+                        desc = it.get("name") or "Healthcare Diagnostic & Service"
+                        ins_portion = float(it.get("insured") or 0.0)
+                        due_portion = float(it.get("due") or amt)
+                        calc_total += amt
+                        calc_insured += ins_portion
+                        calc_due += due_portion
                         items.append({
-                            "code": "CPT 99214",
-                            "desc": "Medical Provider Encounter & Diagnostic Evaluation",
-                            "charge": calc_total,
-                            "insured": calc_insured,
-                            "due": calc_due,
-                            "flag": "Verified Service"
+                            "code": code,
+                            "desc": desc,
+                            "charge": amt,
+                            "insured": ins_portion,
+                            "due": due_portion,
+                            "flag": it.get("flag", "Verified Provider Item")
                         })
 
-                    patient_due = round(calc_due, 2) if calc_due > 0 else 45.00
+                    patient_due = max(0.0, round(calc_due, 2))
                     pay_in_4_eligible = (patient_due >= 30.00 and patient_due <= 1500.00)
                     installment = round(patient_due / 4, 2) if pay_in_4_eligible else patient_due
 
@@ -458,7 +453,7 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
                         "facility": facility,
                         "date": date_val,
                         "currency": currency,
-                        "patient_name": "Verified Patient",
+                        "patient_name": parsed.get("patient_name") or "Verified Patient",
                         "total_amount": round(calc_total, 2),
                         "insurance_covered": round(calc_insured, 2),
                         "patient_due": patient_due,
@@ -468,7 +463,7 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
                         "ai_insights": [
                             f"Live Vision Transcription: {len(lines)} line items parsed via NVIDIA Nemotron-3.5-Super-VL.",
                             f"Pay in 4 Status: {'Eligible ($30-$1,500 range) - 4 bi-weekly payments of $' + str(installment) if pay_in_4_eligible else 'Single payment only (under $30 threshold)'}.",
-                            "No Surprises Act: Provider itemization cross-checked against standard Medicare fee schedules."
+                            "No Surprises Act: Provider itemization cross-checked against standard healthcare benchmarks."
                         ]
                     }
                     INVOICE_STORE[inv_id] = invoice_record
@@ -491,27 +486,42 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
 
         invoice_id = str(body.get("invoice_id", "")).strip()
         
-        # Server-side price authority: retrieve genuine patient due from INVOICE_STORE
-        server_due = None
-        if invoice_id in INVOICE_STORE:
-            record = INVOICE_STORE[invoice_id]
-            server_due = float(record.get("patient_due", 0.0))
-            
+        # Strict server price authority: invoice MUST exist in authorized INVOICE_STORE!
+        if not invoice_id or invoice_id not in INVOICE_STORE:
+            self.send_json({
+                "success": False,
+                "error": "Invoice Not Found",
+                "message": f"Cannot create order: invoice '{invoice_id}' does not exist in authorized ledger. Client price injection blocked."
+            }, status=404)
+            return
+
+        record = INVOICE_STORE[invoice_id]
+        server_due = float(record.get("patient_due", 0.0))
+        currency = str(record.get("currency", "USD")).strip() or "USD"
+
+        if server_due <= 0.0:
+            self.send_json({
+                "success": False,
+                "error": "Zero Balance",
+                "message": "This invoice balance is $0.00 and requires no payment."
+            }, status=400)
+            return
+
         try:
             requested_amount = float(body.get("amount", 0.0))
         except (ValueError, TypeError):
             requested_amount = 0.0
 
-        if server_due is not None and server_due > 0:
-            is_installment = abs(requested_amount - round(server_due / 4, 2)) < 0.02
-            amount = round(server_due / 4, 2) if is_installment else round(server_due, 2)
-        elif requested_amount > 0:
-            amount = requested_amount
+        # Server-enforced amount authority:
+        # If client requested the Pay in 4 installment (within 5 cents of 1/4), and invoice is eligible, bill 1/4.
+        # Otherwise, strictly bill the exact full balance. Client cannot set arbitrary amounts.
+        pay_in_4_eligible = bool(record.get("pay_in_4_eligible", False))
+        quarter_amount = round(server_due / 4, 2)
+        if pay_in_4_eligible and abs(requested_amount - quarter_amount) < 0.05:
+            amount = quarter_amount
         else:
-            self.send_json({"success": False, "error": "Invalid or zero payment amount"}, status=400)
-            return
+            amount = round(server_due, 2)
 
-        currency = str(body.get("currency", "USD")).strip() or "USD"
         result = create_paypal_order(amount, currency, invoice_id)
         self.send_json(result)
 
@@ -566,14 +576,14 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
         invoice_id = str(body.get("invoice_id", "")).strip()
         target_item_code = str(body.get("target_item_code", "")).strip()
 
-        # Retrieve record: 1) INVOICE_STORE, 2) invoice_data payload from client, 3) SAMPLE_BILLS
+        # Retrieve record: read-only from INVOICE_STORE, read-only from client draft, or SAMPLE_BILLS
+        # NEVER write client-supplied invoice_data into the authorized INVOICE_STORE!
         record = None
         if invoice_id and invoice_id in INVOICE_STORE:
             record = INVOICE_STORE[invoice_id]
         elif "invoice_data" in body and isinstance(body["invoice_data"], dict):
+            # Ephemeral read-only draft: client cannot poison INVOICE_STORE
             record = body["invoice_data"]
-            if invoice_id and invoice_id not in INVOICE_STORE:
-                INVOICE_STORE[invoice_id] = record
         elif invoice_id in SAMPLE_BILLS:
             record = SAMPLE_BILLS[invoice_id]
 
