@@ -616,6 +616,66 @@
       color: #fff;
     }
 
+    /* CMS Medicare Benchmark & HSA/FSA Tags */
+    .cms-benchmark-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: rgba(56, 189, 248, 0.08);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      border-radius: 4px;
+      padding: 2px 6px;
+      font-size: 11px;
+      color: #38bdf8;
+      margin-top: 4px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .cms-benchmark-pill .markup-ratio-badge {
+      background: rgba(251, 191, 36, 0.18);
+      color: #fbbf24;
+      border: 1px solid rgba(251, 191, 36, 0.35);
+      padding: 1px 4px;
+      border-radius: 3px;
+      font-weight: 700;
+      font-size: 10px;
+    }
+
+    .hsa-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 700;
+      margin-top: 4px;
+    }
+
+    .hsa-badge.eligible {
+      background: rgba(16, 185, 129, 0.12);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .hsa-badge.review {
+      background: rgba(245, 158, 11, 0.12);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+
+    /* HSA Summary Strip */
+    .hsa-summary-strip {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(16, 185, 129, 0.08);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+      border-radius: var(--radius-sm);
+      padding: 10px 14px;
+      margin-bottom: 16px;
+    }
+
     /* AI Insights Card */
     .ai-insights-box {
       background: rgba(0, 112, 186, 0.08);
@@ -1348,6 +1408,21 @@
             </div>
           </div>
 
+          <!-- HSA/FSA Tax Substantiation & Pre-Screen Bar -->
+          <div class="hsa-summary-strip" id="hsaSummaryStrip">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="font-size:16px;">🛡️</span>
+              <div>
+                <span style="font-weight:700; color:#34d399; font-size:12px;">HSA / FSA Tax-Advantaged Estimate:</span>
+                <span id="dispHsaEligible" style="font-weight:800; font-family:'JetBrains Mono',monospace; color:#34d399; margin-left:6px; font-size:13px;">$180.00</span>
+                <span id="dispHsaReviewNote" style="color:var(--text-muted); font-size:11px; margin-left:6px;">(IRC § 213(d) Pre-Screened)</span>
+              </div>
+            </div>
+            <button type="button" class="btn-preview-hsa" onclick="openHsaEvidenceModal()" style="background:rgba(16, 185, 129, 0.15); border:1px solid rgba(16, 185, 129, 0.4); color:#34d399; font-size:11px; font-weight:700; padding:5px 11px; border-radius:6px; cursor:pointer; transition:all 0.2s;">
+              🧾 View IRS 502 Slip
+            </button>
+          </div>
+
           <!-- Smart Settle Mode Selector: Dispute the Uncertain, Pay the Verified -->
           <div class="settle-mode-selector" id="settleModeSelector">
             <div class="settle-mode-card active" id="modeFullCard" onclick="selectSettleMode('full')">
@@ -1513,7 +1588,12 @@
         <div><span>Timestamp:</span> <span id="modalTime">2026-10-29 15:45:00</span></div>
       </div>
 
-      <button class="close-modal-btn" onclick="closeModal()">Close & Return</button>
+      <div style="display:flex; flex-direction:column; gap:8px; margin-top:16px;">
+        <button class="hsa-evidence-btn" id="btnOpenHsaSlip" onclick="openHsaEvidenceModal()" style="background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; padding:12px 16px; border-radius:var(--radius-sm); font-weight:700; font-size:13px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);">
+          🧾 View IRS Pub 502 Tax Substantiation Slip
+        </button>
+        <button class="close-modal-btn" onclick="closeModal()" style="margin-top:0;">Close & Return</button>
+      </div>
     </div>
   </div>
 
@@ -1549,6 +1629,38 @@
     </div>
   </div>
 
+  <!-- IRS Pub 502 HSA/FSA Payment Evidence Slip Modal -->
+  <div class="modal-overlay" id="hsaModal">
+    <div class="modal-box appeal-modal-box" style="max-width: 720px;">
+      <div class="appeal-modal-header" style="border-bottom: 1px solid rgba(16, 185, 129, 0.3);">
+        <div class="appeal-modal-title">
+          <span style="font-size:24px;">🧾</span>
+          <div>
+            <h3 id="hsaModalTitle" style="margin:0; font-size:18px; color:#34d399;">HSA / FSA Healthcare Expense Evidence Record</h3>
+            <p id="hsaModalSub" style="margin:0; font-size:12px; color:var(--text-muted);">IRC § 213(d) & IRS Publication 502 Substantiation Format (CarePay Verifiable Record)</p>
+          </div>
+        </div>
+        <button class="modal-close-x" onclick="closeHsaEvidenceModal()" title="Close">&times;</button>
+      </div>
+
+      <div class="letter-sheet" id="hsaSlipSheet" style="background:#0b1120; border:1px solid rgba(16, 185, 129, 0.3); max-height:440px; overflow-y:auto; padding:20px; font-family:'JetBrains Mono', monospace; font-size:11px; line-height:1.6; color:#e2e8f0; white-space:pre-wrap; border-radius:var(--radius-sm);">
+        <pre id="hsaSlipContent" style="margin:0; font-family:inherit; white-space:pre-wrap;">Loading HSA/FSA Evidence Record...</pre>
+      </div>
+
+      <div class="appeal-modal-actions">
+        <button class="appeal-act-btn primary" style="background:#10b981; border-color:#059669;" id="btnCopyHsa" onclick="copyHsaEvidenceSlip()">
+          📋 Copy Evidence Slip
+        </button>
+        <button class="appeal-act-btn secondary" id="btnPrintHsa" onclick="printHsaEvidenceSlip()">
+          🖨️ Print / Save PDF
+        </button>
+        <button class="appeal-act-btn outline" onclick="closeHsaEvidenceModal()">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+
   <script>
     let currentLang = 'en';
     const TRANSLATIONS = {
@@ -1573,6 +1685,8 @@
         btnCopyAppeal: "📋 Copy to Clipboard",
         btnPrintAppeal: "🖨️ Print / Save PDF",
         btnCloseAppeal: "Close",
+        btnOpenHsaSlip: "🧾 View IRS Pub 502 Tax Substantiation Slip",
+        btnCopyHsa: "📋 Copy Evidence Slip",
         caregiverTitle: "👨‍👩‍👧 Family Caregiver Link",
         caregiverP: "Send an itemized invoice link to a daughter, son, or guardian so they can review and pay remotely.",
         caregiverBtn: "🔗 Generate Caregiver Request Link",
@@ -1599,6 +1713,8 @@
         btnCopyAppeal: "📋 클립보드에 복사",
         btnPrintAppeal: "🖨️ 인쇄 / PDF 저장",
         btnCloseAppeal: "닫기",
+        btnOpenHsaSlip: "🧾 IRS 502 세무 소명 및 HSA 증빙 슬립 보기",
+        btnCopyHsa: "📋 증빙 슬립 복사",
         caregiverTitle: "👨‍👩‍👧 가족 간병인 원격 결제 링크",
         caregiverP: "타지에 있는 자녀나 보호자에게 상세 청구서 링크를 보내 원격으로 확인하고 PayPal로 대신 결제하도록 요청합니다.",
         caregiverBtn: "🔗 간병인 결제 요청 링크 생성",
@@ -1688,6 +1804,12 @@
 
       const btnCl = document.getElementById('btnCloseAppeal');
       if (btnCl) btnCl.textContent = t.btnCloseAppeal;
+
+      const btnHsa = document.getElementById('btnOpenHsaSlip');
+      if (btnHsa && t.btnOpenHsaSlip) btnHsa.textContent = t.btnOpenHsaSlip;
+
+      const btnCpHsa = document.getElementById('btnCopyHsa');
+      if (btnCpHsa && t.btnCopyHsa) btnCpHsa.textContent = t.btnCopyHsa;
     }
 
     let currentInvoice = {
@@ -1862,6 +1984,22 @@
       document.getElementById('dispInsured').textContent = '-$' + insuredNum.toFixed(2);
       document.getElementById('dispDue').textContent = '$' + dueNum.toFixed(2);
 
+      // Update HSA/FSA Pre-Screen Summary Strip
+      const hsaEligible = Number(data.hsa_eligible_due !== undefined ? data.hsa_eligible_due : dueNum);
+      const hsaReview = Number(data.hsa_review_due || 0);
+      const dispHsaEligible = document.getElementById('dispHsaEligible');
+      const dispHsaNote = document.getElementById('dispHsaReviewNote');
+      if (dispHsaEligible) {
+        dispHsaEligible.textContent = '$' + hsaEligible.toFixed(2);
+      }
+      if (dispHsaNote) {
+        if (hsaReview > 0) {
+          dispHsaNote.textContent = `(IRC § 213(d) Pre-Screened • $${hsaReview.toFixed(2)} OTC Review Req.)`;
+        } else {
+          dispHsaNote.textContent = `(IRC § 213(d) Qualified Medical Expense)`;
+        }
+      }
+
       // Update Settle Mode Selector Amounts
       const fullAmtSpan = document.getElementById('settleFullAmt');
       if (fullAmtSpan) fullAmtSpan.textContent = '$' + dueNum.toFixed(2);
@@ -1890,9 +2028,45 @@
           const tdDesc = document.createElement('td');
           tdDesc.textContent = String(item.desc || 'Healthcare Diagnostic Service');
 
-          // Charges
+          // HSA / FSA Pre-Screen Badge
+          if (item.hsa_status) {
+            const hsaBadge = document.createElement('span');
+            if (item.hsa_status === 'ELIGIBLE') {
+              hsaBadge.className = 'hsa-badge eligible';
+              hsaBadge.textContent = '🛡️ HSA/FSA Eligible';
+              hsaBadge.title = item.hsa_reason || 'Qualified medical expense under IRC § 213(d)';
+            } else if (item.hsa_status === 'POTENTIALLY_ELIGIBLE') {
+              hsaBadge.className = 'hsa-badge review';
+              hsaBadge.textContent = '⚠️ HSA/FSA Review Req.';
+              hsaBadge.title = item.hsa_reason || 'Dietary supplement / OTC: documentation or LMN may be required';
+            }
+            tdDesc.appendChild(document.createElement('br'));
+            tdDesc.appendChild(hsaBadge);
+          }
+
+          // Charges & CMS Medicare Benchmark Pill
           const tdCharge = document.createElement('td');
           tdCharge.textContent = '$' + (Number(item.charge) || 0).toFixed(2);
+
+          if (item.cms_reference_fee) {
+            const cmsFee = Number(item.cms_reference_fee).toFixed(2);
+            const ratio = item.markup_ratio || (Number(item.charge) / Number(item.cms_reference_fee)).toFixed(1);
+            const cmsPill = document.createElement('div');
+            cmsPill.className = 'cms-benchmark-pill';
+            cmsPill.title = `CMS 2026 Medicare National Allowable Benchmark: $${cmsFee}. Billed charge is ${ratio}x of Medicare allowable.`;
+            
+            const cmsSpan = document.createElement('span');
+            cmsSpan.textContent = `🏛️ CMS: $${cmsFee} `;
+            cmsPill.appendChild(cmsSpan);
+
+            const ratioBadge = document.createElement('span');
+            ratioBadge.className = 'markup-ratio-badge';
+            ratioBadge.textContent = `${ratio}x`;
+            cmsPill.appendChild(ratioBadge);
+
+            tdCharge.appendChild(document.createElement('br'));
+            tdCharge.appendChild(cmsPill);
+          }
 
           const tdInsured = document.createElement('td');
           tdInsured.textContent = '$' + (Number(item.insured) || 0).toFixed(2);
@@ -2101,6 +2275,111 @@
       }
       printWindow.document.write('<!DOCTYPE html><html><head><title>No Surprises Act Dispute Letter</title>');
       printWindow.document.write('<style>body { font-family: monospace, serif; font-size: 11pt; line-height: 1.5; white-space: pre-wrap; padding: 40px; color: #000; }</style></head><body>');
+      printWindow.document.write(text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'));
+      printWindow.document.write('</body></html>');
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => {
+        printWindow.print();
+        printWindow.close();
+      }, 300);
+    }
+
+    function openHsaEvidenceModal() {
+      const modal = document.getElementById('hsaModal');
+      const contentEl = document.getElementById('hsaSlipContent');
+      modal.style.display = 'flex';
+      contentEl.textContent = "Loading IRS Publication 502 Evidence Record from secure ledger...";
+
+      const targetId = currentInvoice.caregiver_token || currentInvoice.invoice_id || 'sample';
+      fetch('/api/hsa-evidence/' + encodeURIComponent(targetId))
+        .then(res => res.json())
+        .then(res => {
+          if (res.success && res.evidence) {
+            const ev = res.evidence;
+            let slip = "";
+            slip += "========================================================================================\n";
+            slip += "             HSA / FSA HEALTHCARE EXPENSE PAYMENT EVIDENCE RECORD\n";
+            slip += "   Prepared for Account Reimbursement & Personal Tax Substantiation (IRC § 213(d))\n";
+            slip += "========================================================================================\n\n";
+            slip += `EVIDENCE RECORD ID  : ${ev.evidence_id}\n`;
+            slip += `RECORD ISSUE DATE   : ${ev.issue_timestamp}\n`;
+            slip += `RULES STANDARD      : ${ev.statutory_reference} [${ev.rules_version}]\n\n`;
+            slip += `[HEALTHCARE PROVIDER & PATIENT INFORMATION]\n`;
+            slip += `Provider / Pharmacy : ${ev.facility}\n`;
+            slip += `Date of Service     : ${ev.service_date}\n`;
+            slip += `Patient Name        : ${ev.patient_name}\n`;
+            slip += `Currency            : ${ev.currency}\n\n`;
+            slip += `[PAYPAL TRANSACTION & CAPTURE SETTLEMENT]\n`;
+            slip += `PayPal Order ID     : ${ev.paypal_order_id || 'ORD-SANDBOX-VERIFIED'}\n`;
+            slip += `PayPal Capture ID   : ${ev.paypal_capture_id || 'CAP-SANDBOX-SETTLED'}\n`;
+            slip += `Patient Bill Total  : $${Number(ev.total_patient_due || 0).toFixed(2)}\n`;
+            slip += `Settled via PayPal  : $${Number(ev.total_settled_via_paypal || 0).toFixed(2)}\n\n`;
+            slip += `[HSA / FSA ELIGIBILITY PRE-SCREEN ALLOCATION]\n`;
+            slip += `• Pre-Screened Qualified Medical Expense (IRC § 213(d)) : $${Number(ev.hsa_eligible_amount || 0).toFixed(2)}\n`;
+            slip += `• Documentation / LMN Review Required (OTC/Supplement)  : $${Number(ev.hsa_review_amount || 0).toFixed(2)}\n\n`;
+            slip += `[ITEMIZED CLINICAL SERVICE BREAKDOWN]\n`;
+            slip += "----------------------------------------------------------------------------------------\n";
+            slip += "Code         Description                                   Billed    Paid Due   HSA Status\n";
+            slip += "----------------------------------------------------------------------------------------\n";
+
+            (ev.items || []).forEach(it => {
+              const code = (it.code || 'SVC').padEnd(12);
+              const desc = (it.desc || 'Service').slice(0, 42).padEnd(44);
+              const billed = ('$' + Number(it.charge || 0).toFixed(2)).padStart(8);
+              const paid = ('$' + Number(it.due || 0).toFixed(2)).padStart(9);
+              const st = (it.hsa_status || 'ELIGIBLE');
+              slip += `${code} ${desc} ${billed}  ${paid}   ${st}\n`;
+            });
+
+            slip += "----------------------------------------------------------------------------------------\n\n";
+            slip += `[STATUTORY COMPLIANCE & LEGAL NOTICE]\n`;
+            slip += `${ev.legal_notice}\n`;
+            slip += "========================================================================================\n";
+
+            contentEl.textContent = slip;
+          } else {
+            contentEl.textContent = "Notice: Unable to retrieve evidence record (" + (res.error || "Invoice not found") + ")";
+          }
+        })
+        .catch(err => {
+          contentEl.textContent = "Connection error: " + err.message;
+        });
+    }
+
+    function closeHsaEvidenceModal() {
+      document.getElementById('hsaModal').style.display = 'none';
+    }
+
+    function copyHsaEvidenceSlip() {
+      const text = document.getElementById('hsaSlipContent').textContent;
+      const btn = document.getElementById('btnCopyHsa');
+      const orig = btn.textContent;
+      const successFeedback = () => {
+        btn.textContent = (currentLang === 'ko') ? "✓ 복사 완료!" : "✓ Copied!";
+        setTimeout(() => { btn.textContent = orig; }, 2000);
+      };
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(successFeedback).catch(() => {
+          fallbackCopyText(text);
+          successFeedback();
+        });
+      } else {
+        fallbackCopyText(text);
+        successFeedback();
+      }
+    }
+
+    function printHsaEvidenceSlip() {
+      const text = document.getElementById('hsaSlipContent').textContent;
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        alert("Please allow popups to print or save the slip as PDF.");
+        return;
+      }
+      printWindow.document.write('<!DOCTYPE html><html><head><title>HSA FSA Payment Evidence Slip</title>');
+      printWindow.document.write('<style>body { font-family: "JetBrains Mono", monospace, serif; font-size: 9.5pt; line-height: 1.45; white-space: pre-wrap; padding: 30px; color: #000; }</style></head><body>');
       printWindow.document.write(text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'));
       printWindow.document.write('</body></html>');
       printWindow.document.close();
