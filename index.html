@@ -1235,8 +1235,8 @@
                   <td>$60.00</td>
                   <td>$30.00</td>
                   <td>
-                    <span class="status-tag surprise" style="cursor:pointer;" onclick="openAppealModal()" title="Click to view legal dispute letter">Surprise Guarded</span>
-                    <button class="dispute-inline-btn" onclick="openAppealModal()">⚖️ Dispute</button>
+                    <span class="status-tag surprise" style="cursor:pointer;" onclick="openAppealModal('CPT 96372')" title="Click to view legal dispute letter">Surprise Guarded</span>
+                    <button class="dispute-inline-btn" onclick="openAppealModal('CPT 96372')">⚖️ Dispute</button>
                   </td>
                 </tr>
               </tbody>
@@ -1665,8 +1665,8 @@
           spanFlag.textContent = flagStr;
           if (isSurprise) {
             spanFlag.style.cursor = 'pointer';
-            spanFlag.onclick = () => openAppealModal();
-            spanFlag.title = 'Click to view official dispute letter';
+            spanFlag.onclick = () => openAppealModal(item.code);
+            spanFlag.title = 'Click to view official dispute letter for ' + (item.code || 'this service');
           }
           tdFlag.appendChild(spanFlag);
 
@@ -1674,7 +1674,7 @@
             const disputeBtn = document.createElement('button');
             disputeBtn.className = 'dispute-inline-btn';
             disputeBtn.textContent = '⚖️ Dispute';
-            disputeBtn.onclick = (e) => { e.stopPropagation(); openAppealModal(); };
+            disputeBtn.onclick = (e) => { e.stopPropagation(); openAppealModal(item.code); };
             tdFlag.appendChild(document.createTextNode(' '));
             tdFlag.appendChild(disputeBtn);
           }
@@ -1772,18 +1772,22 @@
       document.getElementById('successModal').style.display = 'none';
     }
 
-    function openAppealModal() {
+    function openAppealModal(targetCode) {
       const modal = document.getElementById('appealModal');
       const letterPre = document.getElementById('appealLetterText');
       letterPre.textContent = (currentLang === 'ko') 
-        ? "AI가 No Surprises Act 법률 규격에 맞춘 공식 이의신청서를 작성 중입니다..." 
-        : "Generating formal dispute letter under US No Surprises Act...";
+        ? "AI가 청구서 실데이터를 분석하여 No Surprises Act 법률 이의신청서를 작성 중입니다..." 
+        : "Auditing live statement data and generating formal dispute letter under US No Surprises Act...";
       modal.style.display = 'flex';
 
       fetch('/api/appeal/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ invoice_id: currentInvoice.invoice_id })
+        body: JSON.stringify({ 
+          invoice_id: currentInvoice.invoice_id || "CP-CAREPAY",
+          target_item_code: targetCode || "",
+          invoice_data: currentInvoice
+        })
       })
       .then(res => {
         if (!res.ok) throw new Error("HTTP " + res.status);
@@ -1793,7 +1797,7 @@
         if (data.success && (data.letter_text || data.appeal_letter)) {
           letterPre.textContent = data.letter_text || data.appeal_letter;
         } else {
-          letterPre.textContent = "Error generating appeal letter. Please try again.";
+          letterPre.textContent = "Notice: Unable to generate appeal letter (" + (data.error || "Invoice not found") + ")";
         }
       })
       .catch(err => {

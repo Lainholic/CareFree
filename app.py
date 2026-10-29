@@ -177,19 +177,17 @@ def create_paypal_order(amount, currency="USD", invoice_id=""):
                 }
         except Exception as e:
             print(f"[PayPal Create Order Error] {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "mode": "live_paypal_sandbox_failed",
+                "message": f"PayPal live sandbox order creation failed: {e}"
+            }
 
-    # Compliant Orders v2 Sandbox schema
-    order_id = f"PAYPAL-ORD-{uuid.uuid4().hex[:12].upper()}"
     return {
-        "success": True,
-        "order_id": order_id,
-        "status": "CREATED",
-        "mode": "sandbox_staging",
-        "intent": "CAPTURE",
-        "amount": amount,
-        "currency": currency,
-        "invoice_id": invoice_id,
-        "message": "PayPal Orders v2 generated successfully via Sandbox."
+        "success": False,
+        "error": "PayPal credentials not configured in .env",
+        "message": "Please configure valid PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET."
     }
 
 
@@ -221,18 +219,17 @@ def capture_paypal_order(order_id, amount=0.0):
                 }
         except Exception as e:
             print(f"[PayPal Capture Order Error] {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "mode": "live_paypal_sandbox_failed",
+                "message": f"PayPal live sandbox order capture failed: {e}"
+            }
 
-    # Compliant Orders v2 Capture schema
-    capture_id = f"CAPTURE-{uuid.uuid4().hex[:10].upper()}"
     return {
-        "success": True,
-        "capture_id": capture_id,
-        "order_id": order_id,
-        "status": "COMPLETED",
-        "amount": amount,
-        "mode": "sandbox_staging",
-        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "message": "Payment captured successfully via PayPal Sandbox Orders v2."
+        "success": False,
+        "error": "Invalid order_id or missing PayPal credentials",
+        "message": "Cannot capture order without active PayPal credentials."
     }
 
 
@@ -512,32 +509,63 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
         })
 
     def handle_appeal_generate(self, body):
-        invoice_id = body.get("invoice_id", "CP-SAMPLE")
-        if invoice_id in INVOICE_STORE:
+        if not isinstance(body, dict):
+            self.send_json({"success": False, "error": "Invalid request body: object expected"}, status=400)
+            return
+
+        invoice_id = str(body.get("invoice_id", "")).strip()
+        target_item_code = str(body.get("target_item_code", "")).strip()
+
+        # Retrieve record: 1) INVOICE_STORE, 2) invoice_data payload from client, 3) SAMPLE_BILLS
+        record = None
+        if invoice_id and invoice_id in INVOICE_STORE:
             record = INVOICE_STORE[invoice_id]
-        else:
-            record = copy.deepcopy(SAMPLE_BILLS.get("us_hospital_bill.png", {}))
-            record["invoice_id"] = invoice_id
+        elif "invoice_data" in body and isinstance(body["invoice_data"], dict):
+            record = body["invoice_data"]
+            if invoice_id and invoice_id not in INVOICE_STORE:
+                INVOICE_STORE[invoice_id] = record
+        elif invoice_id in SAMPLE_BILLS:
+            record = SAMPLE_BILLS[invoice_id]
+
+        if not record:
+            self.send_json({"success": False, "error": f"Invoice record not found for reference: {invoice_id}"}, status=404)
+            return
 
         facility = record.get("facility", "Healthcare Provider")
-        patient_name = record.get("patient_name", "Eleanor Vance")
+        patient_name = record.get("patient_name", "Valued Patient")
         date_of_service = record.get("date", time.strftime("%Y-%m-%d"))
         today_str = time.strftime("%B %d, %Y")
         
-        # Identify surprise or disputed items
         items = record.get("items", [])
-        disputed_items = [it for it in items if "Surprise" in it.get("flag", "") or "Benchmark" in it.get("flag", "")]
+        
+        # Pinpoint targeted item code or surprise/disputed items
+        disputed_items = []
+        if target_item_code:
+            disputed_items = [it for it in items if str(it.get("code", "")).strip() == target_item_code]
+        
         if not disputed_items:
-            disputed_items = items[:1] if items else []
+            disputed_items = [it for it in items if "Surprise" in it.get("flag", "") or "Benchmark" in it.get("flag", "")]
 
         dispute_lines = []
-        for it in disputed_items:
-            dispute_lines.append(
-                f"  • Service / Code: {it.get('code', 'CPT')} ({it.get('desc', 'Medical Service')})\n"
-                f"    Billed Amount: ${it.get('charge', 0.0):.2f} | Allowable In-Network Rate: ${it.get('insured', 0.0):.2f}\n"
-                f"    Disputed Out-of-Network Balance: ${it.get('due', 0.0):.2f}"
+        if disputed_items:
+            for it in disputed_items:
+                dispute_lines.append(
+                    f"  • Service / Code: {it.get('code', 'HCPCS/CPT')} — {it.get('desc', 'Healthcare Service')}\n"
+                    f"    Billed Charge: ${float(it.get('charge', 0.0)):.2f} | Insurance Covered: ${float(it.get('insured', 0.0)):.2f} | Stated Patient Balance: ${float(it.get('due', 0.0)):.2f}"
+                )
+            disputed_text = "\n\n".join(dispute_lines)
+            scope_notice = (
+                "Upon reviewing this statement with PainFree CarePay AI, the following service item(s) require verification "
+                "under the federal No Surprises Act (Public Law 116-260, 45 CFR Part 149) regarding provider network status "
+                "and allowable patient cost-sharing benchmarks:\n\n"
+                f"{disputed_text}"
             )
-        disputed_text = "\n\n".join(dispute_lines) if dispute_lines else "  • Out-of-network balance billing fee adjustment"
+        else:
+            scope_notice = (
+                "Pursuant to patient rights under federal healthcare regulations and the No Surprises Act, I am requesting "
+                "a comprehensive unbundled itemization of all charges, clinician NPIs, and in-network cost-sharing fee schedules "
+                "associated with this date of service."
+            )
 
         letter_text = (
             f"DATE: {today_str}\n\n"
@@ -546,31 +574,25 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
             f"{facility}\n\n"
             f"FROM:\n"
             f"{patient_name}\n"
-            f"RE: Formal Balance Billing Dispute & Itemized Audit Request\n"
-            f"Account / Invoice Reference ID: {invoice_id}\n"
+            f"RE: Formal Itemized Billing Audit & Cost-Sharing Verification Request\n"
+            f"Account / Invoice Reference ID: {invoice_id or 'CP-VERIFIED'}\n"
             f"Date of Service: {date_of_service}\n\n"
             f"Dear Billing Manager,\n\n"
-            f"I am writing to formally dispute the balance billing charges received on the account referenced above. "
-            f"Under the federal No Surprises Act (Public Law 116-260, Consolidated Appropriations Act, Title I), "
-            f"patients receiving emergency or ancillary healthcare services at in-network facilities are protected from "
-            f"surprise out-of-network balance billing.\n\n"
-            f"Upon auditing the itemized charges with PainFree CarePay AI, the following service(s) were flagged as "
-            f"unauthorized out-of-network charges or amounts exceeding fair qualifying payment amounts (QPA):\n\n"
-            f"{disputed_text}\n\n"
-            f"STATEMENT OF DISPUTE UNDER FEDERAL LAW:\n"
-            f"Pursuant to 45 CFR § 149.410 and § 149.420, healthcare providers are prohibited from billing patients for amounts "
-            f"greater than in-network cost-sharing requirements for emergency and non-emergency services rendered at an in-network facility "
-            f"by out-of-network clinicians without valid prior written notice and informed consent.\n\n"
-            f"REQUESTED ACTIONS:\n"
-            f"1. Immediately place a 30-day hold on this account to prevent collection activity while this dispute is formally evaluated.\n"
-            f"2. Provide a fully unbundled, itemized bill listing all HCPCS/CPT codes, revenue codes, and national provider identifiers (NPI).\n"
-            f"3. Recalculate patient responsibility to reflect in-network median benchmark rates, removing all unauthorized surprise charges.\n\n"
-            f"I am prepared to settle the undisputed in-network patient responsibility immediately via PayPal as soon as the revised billing statement is verified.\n\n"
-            f"Thank you for your prompt attention to this federal compliance matter.\n\n"
+            f"I am writing to formally request a detailed audit and clarification of charges on the account referenced above.\n\n"
+            f"{scope_notice}\n\n"
+            f"STATEMENT OF INQUIRY UNDER 45 CFR § 149.410 & § 149.420:\n"
+            f"1. Facility & Provider Network Status: Please confirm whether all attending and ancillary clinicians rendering care at your facility were participating in-network providers with my health plan.\n"
+            f"2. Cost-Sharing Limitation: If any charges originate from out-of-network clinicians at this in-network facility without prior written consent, please ensure patient responsibility is restricted strictly to the recognized in-network cost-sharing amount or Qualifying Payment Amount (QPA).\n"
+            f"3. Itemized Fee Schedule: Please furnish a fully unbundled billing statement itemizing revenue codes, HCPCS/CPT codes, and National Provider Identifiers (NPI).\n\n"
+            f"REQUESTED ADMINISTRATIVE ACTIONS:\n"
+            f"1. Place a temporary 30-day administrative hold on this account to suspend any automated collections or late fees while this review is conducted.\n"
+            f"2. Issue an updated billing statement reflecting verified in-network cost-sharing calculations.\n\n"
+            f"Please note: As soon as the verified itemized calculation is confirmed, I am prepared to promptly settle the undisputed patient responsibility via PayPal.\n\n"
+            f"Thank you for your prompt assistance and cooperation.\n\n"
             f"Sincerely,\n\n"
             f"_________________________________________\n"
             f"{patient_name}\n"
-            f"Patient / Authorized Family Caregiver\n"
+            f"Patient / Authorized Healthcare Representative\n"
         )
 
         self.send_json({
@@ -579,10 +601,11 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
             "invoice_id": invoice_id,
             "facility": facility,
             "patient_name": patient_name,
+            "target_item_code": target_item_code,
             "letter_text": letter_text,
             "legal_statute": "US No Surprises Act (45 CFR § 149.410 / § 149.420)",
             "disputed_items_count": len(disputed_items),
-            "message": "Federal billing dispute letter drafted successfully."
+            "message": "Federal billing audit and dispute letter drafted successfully."
         })
 
     def send_json(self, data, status=200):
