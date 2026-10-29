@@ -598,6 +598,24 @@
       border: 1px solid rgba(244, 63, 94, 0.3);
     }
 
+    .dispute-inline-btn {
+      background: rgba(244, 63, 94, 0.2);
+      border: 1px solid rgba(244, 63, 94, 0.5);
+      color: #fb7185;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-left: 6px;
+      transition: all 0.2s;
+    }
+
+    .dispute-inline-btn:hover {
+      background: #e11d48;
+      color: #fff;
+    }
+
     /* AI Insights Card */
     .ai-insights-box {
       background: rgba(0, 112, 186, 0.08);
@@ -1216,7 +1234,10 @@
                   <td>$90.00</td>
                   <td>$60.00</td>
                   <td>$30.00</td>
-                  <td><span class="status-tag surprise">Surprise Guarded</span></td>
+                  <td>
+                    <span class="status-tag surprise" style="cursor:pointer;" onclick="openAppealModal()" title="Click to view legal dispute letter">Surprise Guarded</span>
+                    <button class="dispute-inline-btn" onclick="openAppealModal()">⚖️ Dispute</button>
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -1225,7 +1246,10 @@
           <div class="ai-insights-box">
             <div class="ai-insights-header">💡 AI Patient Protection & Benchmark Insights</div>
             <div id="dispInsights">
-              <div class="ai-insight-bullet"><span>•</span> No Surprises Act Protection: CPT 96372 was audited against regional in-network fair-market median.</div>
+              <div class="ai-insight-bullet">
+                <span>•</span>
+                <span>No Surprises Act Protection: CPT 96372 audited. <a href="javascript:void(0)" onclick="openAppealModal()" style="color:#38bdf8; text-decoration:underline; font-weight:700; margin-left:4px;">[Review Dispute Letter ⚖️]</a></span>
+              </div>
               <div class="ai-insight-bullet"><span>•</span> Eligible for PayPal Pay in 4: Split this $180.00 bill into 4 interest-free bi-weekly payments of $45.00.</div>
               <div class="ai-insight-bullet"><span>•</span> Family Share Ready: Generate remote caregiver payment invoice with 1 click.</div>
             </div>
@@ -1636,9 +1660,24 @@
           const tdFlag = document.createElement('td');
           const spanFlag = document.createElement('span');
           const flagStr = String(item.flag || 'Verified');
-          spanFlag.className = 'status-tag ' + (flagStr.includes('Surprise') ? 'surprise' : 'verified');
+          const isSurprise = flagStr.includes('Surprise');
+          spanFlag.className = 'status-tag ' + (isSurprise ? 'surprise' : 'verified');
           spanFlag.textContent = flagStr;
+          if (isSurprise) {
+            spanFlag.style.cursor = 'pointer';
+            spanFlag.onclick = () => openAppealModal();
+            spanFlag.title = 'Click to view official dispute letter';
+          }
           tdFlag.appendChild(spanFlag);
+
+          if (isSurprise) {
+            const disputeBtn = document.createElement('button');
+            disputeBtn.className = 'dispute-inline-btn';
+            disputeBtn.textContent = '⚖️ Dispute';
+            disputeBtn.onclick = (e) => { e.stopPropagation(); openAppealModal(); };
+            tdFlag.appendChild(document.createTextNode(' '));
+            tdFlag.appendChild(disputeBtn);
+          }
 
           tr.appendChild(tdCode);
           tr.appendChild(tdDesc);
