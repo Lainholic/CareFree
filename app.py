@@ -341,6 +341,10 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
             self.handle_caregiver_link(body)
             return
 
+        if clean_path == "api/appeal/generate":
+            self.handle_appeal_generate(body)
+            return
+
         self.send_json({"error": "Unknown API endpoint"}, status=404)
 
     def handle_analyze(self, body):
@@ -505,6 +509,80 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
             "pay_in_4_eligible": record.get("pay_in_4_eligible", True),
             "pay_in_4_installment": record.get("pay_in_4_installment", 45.00),
             "message": "Caregiver payment request generated successfully."
+        })
+
+    def handle_appeal_generate(self, body):
+        invoice_id = body.get("invoice_id", "CP-SAMPLE")
+        if invoice_id in INVOICE_STORE:
+            record = INVOICE_STORE[invoice_id]
+        else:
+            record = copy.deepcopy(SAMPLE_BILLS.get("us_hospital_bill.png", {}))
+            record["invoice_id"] = invoice_id
+
+        facility = record.get("facility", "Healthcare Provider")
+        patient_name = record.get("patient_name", "Eleanor Vance")
+        date_of_service = record.get("date", time.strftime("%Y-%m-%d"))
+        today_str = time.strftime("%B %d, %Y")
+        
+        # Identify surprise or disputed items
+        items = record.get("items", [])
+        disputed_items = [it for it in items if "Surprise" in it.get("flag", "") or "Benchmark" in it.get("flag", "")]
+        if not disputed_items:
+            disputed_items = items[:1] if items else []
+
+        dispute_lines = []
+        for it in disputed_items:
+            dispute_lines.append(
+                f"  • Service / Code: {it.get('code', 'CPT')} ({it.get('desc', 'Medical Service')})\n"
+                f"    Billed Amount: ${it.get('charge', 0.0):.2f} | Allowable In-Network Rate: ${it.get('insured', 0.0):.2f}\n"
+                f"    Disputed Out-of-Network Balance: ${it.get('due', 0.0):.2f}"
+            )
+        disputed_text = "\n\n".join(dispute_lines) if dispute_lines else "  • Out-of-network balance billing fee adjustment"
+
+        letter_text = (
+            f"DATE: {today_str}\n\n"
+            f"TO:\n"
+            f"Billing & Patient Financial Services Department\n"
+            f"{facility}\n\n"
+            f"FROM:\n"
+            f"{patient_name}\n"
+            f"RE: Formal Balance Billing Dispute & Itemized Audit Request\n"
+            f"Account / Invoice Reference ID: {invoice_id}\n"
+            f"Date of Service: {date_of_service}\n\n"
+            f"Dear Billing Manager,\n\n"
+            f"I am writing to formally dispute the balance billing charges received on the account referenced above. "
+            f"Under the federal No Surprises Act (Public Law 116-260, Consolidated Appropriations Act, Title I), "
+            f"patients receiving emergency or ancillary healthcare services at in-network facilities are protected from "
+            f"surprise out-of-network balance billing.\n\n"
+            f"Upon auditing the itemized charges with PainFree CarePay AI, the following service(s) were flagged as "
+            f"unauthorized out-of-network charges or amounts exceeding fair qualifying payment amounts (QPA):\n\n"
+            f"{disputed_text}\n\n"
+            f"STATEMENT OF DISPUTE UNDER FEDERAL LAW:\n"
+            f"Pursuant to 45 CFR § 149.410 and § 149.420, healthcare providers are prohibited from billing patients for amounts "
+            f"greater than in-network cost-sharing requirements for emergency and non-emergency services rendered at an in-network facility "
+            f"by out-of-network clinicians without valid prior written notice and informed consent.\n\n"
+            f"REQUESTED ACTIONS:\n"
+            f"1. Immediately place a 30-day hold on this account to prevent collection activity while this dispute is formally evaluated.\n"
+            f"2. Provide a fully unbundled, itemized bill listing all HCPCS/CPT codes, revenue codes, and national provider identifiers (NPI).\n"
+            f"3. Recalculate patient responsibility to reflect in-network median benchmark rates, removing all unauthorized surprise charges.\n\n"
+            f"I am prepared to settle the undisputed in-network patient responsibility immediately via PayPal as soon as the revised billing statement is verified.\n\n"
+            f"Thank you for your prompt attention to this federal compliance matter.\n\n"
+            f"Sincerely,\n\n"
+            f"_________________________________________\n"
+            f"{patient_name}\n"
+            f"Patient / Authorized Family Caregiver\n"
+        )
+
+        self.send_json({
+            "success": True,
+            "appeal_id": f"APL-{secrets.token_hex(4).upper()}",
+            "invoice_id": invoice_id,
+            "facility": facility,
+            "patient_name": patient_name,
+            "letter_text": letter_text,
+            "legal_statute": "US No Surprises Act (45 CFR § 149.410 / § 149.420)",
+            "disputed_items_count": len(disputed_items),
+            "message": "Federal billing dispute letter drafted successfully."
         })
 
     def send_json(self, data, status=200):

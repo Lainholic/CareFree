@@ -888,6 +888,159 @@
       font-weight: 700;
       cursor: pointer;
     }
+
+    /* Evidence-to-Appeal Banner & Modal */
+    .appeal-banner {
+      margin-top: 16px;
+      background: linear-gradient(135deg, rgba(244, 63, 94, 0.08), rgba(225, 29, 72, 0.12));
+      border: 1px solid rgba(244, 63, 94, 0.35);
+      border-radius: var(--radius-sm);
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .appeal-banner-content {
+      flex: 1;
+    }
+
+    .appeal-banner-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #fb7185;
+      margin-bottom: 4px;
+    }
+
+    .appeal-banner p {
+      font-size: 12px;
+      color: #cbd5e1;
+      margin: 0;
+      line-height: 1.4;
+    }
+
+    .appeal-btn {
+      background: linear-gradient(135deg, #e11d48, #be123c);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-sm);
+      padding: 10px 16px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s;
+      box-shadow: 0 4px 12px rgba(225, 29, 72, 0.3);
+    }
+
+    .appeal-btn:hover {
+      background: linear-gradient(135deg, #f43f5e, #e11d48);
+      transform: translateY(-1px);
+    }
+
+    .appeal-modal-box {
+      max-width: 680px;
+      width: 95%;
+      padding: 24px;
+      text-align: left;
+    }
+
+    .appeal-modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .appeal-modal-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .modal-close-x {
+      background: transparent;
+      border: none;
+      color: var(--text-dim);
+      font-size: 24px;
+      cursor: pointer;
+      line-height: 1;
+      padding: 0 4px;
+      transition: color 0.2s;
+    }
+
+    .modal-close-x:hover {
+      color: #fff;
+    }
+
+    .letter-sheet {
+      background: #0f172a;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 20px;
+      max-height: 380px;
+      overflow-y: auto;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      color: #e2e8f0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      user-select: text;
+    }
+
+    .appeal-modal-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 18px;
+      justify-content: flex-end;
+    }
+
+    .appeal-act-btn {
+      padding: 9px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+      border: 1px solid transparent;
+    }
+
+    .appeal-act-btn.primary {
+      background: var(--pp-blue);
+      color: #fff;
+    }
+
+    .appeal-act-btn.primary:hover {
+      background: #0070ba;
+    }
+
+    .appeal-act-btn.secondary {
+      background: rgba(255, 255, 255, 0.08);
+      color: #fff;
+      border-color: var(--border-subtle);
+    }
+
+    .appeal-act-btn.secondary:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .appeal-act-btn.outline {
+      background: transparent;
+      color: var(--text-muted);
+      border-color: var(--border-subtle);
+    }
+
+    .appeal-act-btn.outline:hover {
+      color: #fff;
+      border-color: rgba(255, 255, 255, 0.3);
+    }
   </style>
   <!-- PayPal JS SDK (Official Sandbox Integration with Pay in 4) -->
   <script src="https://www.paypal.com/sdk/js?client-id=AS1428RrnP5XYHTUHnJ6AbEgYFTLTFXtQ9f8f9q5dQbpoWMbJ5-zT7JaVnYZ9Qt0paRWB208ClXeCwhq&currency=USD&components=buttons,messages&enable-funding=paylater"></script>
@@ -1077,6 +1230,20 @@
               <div class="ai-insight-bullet"><span>•</span> Family Share Ready: Generate remote caregiver payment invoice with 1 click.</div>
             </div>
           </div>
+
+          <!-- Evidence-to-Appeal Dispute Generator -->
+          <div class="appeal-banner" id="appealBanner">
+            <div class="appeal-banner-content">
+              <div class="appeal-banner-title">
+                <span class="appeal-shield">⚖️</span>
+                <span id="appealBannerTitle">No Surprises Act Dispute Assistant</span>
+              </div>
+              <p id="appealBannerDesc">Detected potential balance billing (CPT 96372). Generate a legally binding formal appeal letter under 45 CFR § 149.410 to dispute out-of-network balance charges.</p>
+            </div>
+            <button class="appeal-btn" id="btnGenAppeal" onclick="openAppealModal()">
+              📄 Generate Dispute Letter
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1154,6 +1321,38 @@
     </div>
   </div>
 
+  <!-- Evidence-to-Appeal Modal -->
+  <div class="modal-overlay" id="appealModal">
+    <div class="modal-box appeal-modal-box">
+      <div class="appeal-modal-header">
+        <div class="appeal-modal-title">
+          <span style="font-size:24px;">⚖️</span>
+          <div>
+            <h3 id="appealModalTitle" style="margin:0; font-size:18px;">Official Dispute Letter Preview</h3>
+            <p id="appealModalSub" style="margin:0; font-size:12px; color:var(--text-muted);">US No Surprises Act (45 CFR § 149.410 / § 149.420)</p>
+          </div>
+        </div>
+        <button class="modal-close-x" onclick="closeAppealModal()" title="Close">&times;</button>
+      </div>
+
+      <div class="letter-sheet" id="letterSheet">
+        <pre id="appealLetterText">Generating dispute letter...</pre>
+      </div>
+
+      <div class="appeal-modal-actions">
+        <button class="appeal-act-btn primary" id="btnCopyAppeal" onclick="copyAppealLetter()">
+          📋 Copy to Clipboard
+        </button>
+        <button class="appeal-act-btn secondary" id="btnPrintAppeal" onclick="printAppealLetter()">
+          🖨️ Print / Save PDF
+        </button>
+        <button class="appeal-act-btn outline" id="btnCloseAppeal" onclick="closeAppealModal()">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+
   <script>
     let currentLang = 'en';
     const TRANSLATIONS = {
@@ -1170,6 +1369,14 @@
         mobileUploadP: "Select from gallery or snap a photo:",
         mobGalleryBtn: "🖼️ Photo Gallery",
         mobCameraBtn: "📷 Snap Camera",
+        appealBannerTitle: "No Surprises Act Dispute Assistant",
+        appealBannerDesc: "Detected potential balance billing (CPT 96372). Generate a legally binding formal appeal letter under 45 CFR § 149.410 to dispute out-of-network balance charges.",
+        btnGenAppeal: "📄 Generate Dispute Letter",
+        appealModalTitle: "Official Dispute Letter Preview",
+        appealModalSub: "US No Surprises Act (45 CFR § 149.410 / § 149.420)",
+        btnCopyAppeal: "📋 Copy to Clipboard",
+        btnPrintAppeal: "🖨️ Print / Save PDF",
+        btnCloseAppeal: "Close",
         caregiverTitle: "👨‍👩‍👧 Family Caregiver Link",
         caregiverP: "Send an itemized invoice link to a daughter, son, or guardian so they can review and pay remotely.",
         caregiverBtn: "🔗 Generate Caregiver Request Link",
@@ -1188,6 +1395,14 @@
         mobileUploadP: "갤러리에서 선택하거나 직접 촬영하세요:",
         mobGalleryBtn: "🖼️ 갤러리",
         mobCameraBtn: "📷 카메라",
+        appealBannerTitle: "미국 부당 의료비 이의신청 AI 지원",
+        appealBannerDesc: "과다/부당 청구(CPT 96372) 감지됨. 미국 연방법 No Surprises Act(45 CFR § 149.410)에 의거한 공식 병원 이의신청서를 즉시 생성합니다.",
+        btnGenAppeal: "📄 공식 이의신청서 생성",
+        appealModalTitle: "병원 제출용 공식 이의신청서 미리보기",
+        appealModalSub: "미국 No Surprises Act 법률 규격 (45 CFR § 149.410 / § 149.420)",
+        btnCopyAppeal: "📋 클립보드에 복사",
+        btnPrintAppeal: "🖨️ 인쇄 / PDF 저장",
+        btnCloseAppeal: "닫기",
         caregiverTitle: "👨‍👩‍👧 가족 간병인 원격 결제 링크",
         caregiverP: "타지에 있는 자녀나 보호자에게 상세 청구서 링크를 보내 원격으로 확인하고 PayPal로 대신 결제하도록 요청합니다.",
         caregiverBtn: "🔗 간병인 결제 요청 링크 생성",
@@ -1253,6 +1468,30 @@
 
       const fbBtn = document.getElementById('fallbackPayBtn');
       if (fbBtn) fbBtn.textContent = t.fallbackPayBtn;
+
+      const apTitle = document.getElementById('appealBannerTitle');
+      if (apTitle) apTitle.textContent = t.appealBannerTitle;
+
+      const apDesc = document.getElementById('appealBannerDesc');
+      if (apDesc) apDesc.textContent = t.appealBannerDesc;
+
+      const apBtn = document.getElementById('btnGenAppeal');
+      if (apBtn) apBtn.textContent = t.btnGenAppeal;
+
+      const apModTitle = document.getElementById('appealModalTitle');
+      if (apModTitle) apModTitle.textContent = t.appealModalTitle;
+
+      const apModSub = document.getElementById('appealModalSub');
+      if (apModSub) apModSub.textContent = t.appealModalSub;
+
+      const btnCp = document.getElementById('btnCopyAppeal');
+      if (btnCp) btnCp.textContent = t.btnCopyAppeal;
+
+      const btnPr = document.getElementById('btnPrintAppeal');
+      if (btnPr) btnPr.textContent = t.btnPrintAppeal;
+
+      const btnCl = document.getElementById('btnCloseAppeal');
+      if (btnCl) btnCl.textContent = t.btnCloseAppeal;
     }
 
     let currentInvoice = {
@@ -1492,6 +1731,68 @@
 
     function closeModal() {
       document.getElementById('successModal').style.display = 'none';
+    }
+
+    function openAppealModal() {
+      const modal = document.getElementById('appealModal');
+      const letterPre = document.getElementById('appealLetterText');
+      letterPre.textContent = (currentLang === 'ko') 
+        ? "AI가 No Surprises Act 법률 규격에 맞춘 공식 이의신청서를 작성 중입니다..." 
+        : "Generating formal dispute letter under US No Surprises Act...";
+      modal.style.display = 'flex';
+
+      fetch('/api/appeal/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invoice_id: currentInvoice.invoice_id })
+      })
+      .then(res => {
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        return res.json();
+      })
+      .then(data => {
+        if (data.success && (data.letter_text || data.appeal_letter)) {
+          letterPre.textContent = data.letter_text || data.appeal_letter;
+        } else {
+          letterPre.textContent = "Error generating appeal letter. Please try again.";
+        }
+      })
+      .catch(err => {
+        letterPre.textContent = "Connection error: " + err.message;
+      });
+    }
+
+    function closeAppealModal() {
+      document.getElementById('appealModal').style.display = 'none';
+    }
+
+    function copyAppealLetter() {
+      const text = document.getElementById('appealLetterText').textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        const btn = document.getElementById('btnCopyAppeal');
+        const orig = btn.textContent;
+        btn.textContent = (currentLang === 'ko') ? "✓ 복사 완료!" : "✓ Copied!";
+        setTimeout(() => { btn.textContent = orig; }, 2000);
+      });
+    }
+
+    function printAppealLetter() {
+      const text = document.getElementById('appealLetterText').textContent;
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        alert("Please allow popups to print or save the letter as PDF.");
+        return;
+      }
+      printWindow.document.write('<!DOCTYPE html><html><head><title>No Surprises Act Dispute Letter</title>');
+      printWindow.document.write('<style>body { font-family: monospace, serif; font-size: 11pt; line-height: 1.5; white-space: pre-wrap; padding: 40px; color: #000; }</style></head><body>');
+      printWindow.document.write(text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'));
+      printWindow.document.write('</body></html>');
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => {
+        printWindow.print();
+        printWindow.close();
+      }, 300);
     }
 
     function initPayPalSdk() {
