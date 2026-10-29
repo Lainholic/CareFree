@@ -418,7 +418,12 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
             return
 
         if content_length > MAX_BODY_BYTES:
-            self.send_json({"error": "Request payload exceeds size limit (12MB)"}, status=413)
+            self.send_response(413)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Connection", "close")
+            self.end_headers()
+            self.wfile.write(b'{"error": "Request payload exceeds size limit (12MB)"}')
+            self.close_connection = True
             return
 
         post_data = self.rfile.read(content_length)

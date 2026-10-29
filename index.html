@@ -1785,7 +1785,12 @@
 
     function loadPreset(sampleName, btnElem) {
       document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
-      if (btnElem) btnElem.classList.add('active');
+      if (btnElem) {
+        btnElem.classList.add('active');
+      } else {
+        const targetBtn = Array.from(document.querySelectorAll('.preset-btn')).find(b => b.getAttribute('onclick') && b.getAttribute('onclick').includes(sampleName));
+        if (targetBtn) targetBtn.classList.add('active');
+      }
 
       document.getElementById('billPreview').src = '/sample_receipts/' + sampleName;
       document.getElementById('scanLaser').style.display = 'block';
@@ -2026,12 +2031,38 @@
 
     function copyAppealLetter() {
       const text = document.getElementById('appealLetterText').textContent;
-      navigator.clipboard.writeText(text).then(() => {
-        const btn = document.getElementById('btnCopyAppeal');
-        const orig = btn.textContent;
+      const btn = document.getElementById('btnCopyAppeal');
+      const orig = btn.textContent;
+      const successFeedback = () => {
         btn.textContent = (currentLang === 'ko') ? "✓ 복사 완료!" : "✓ Copied!";
         setTimeout(() => { btn.textContent = orig; }, 2000);
-      });
+      };
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(successFeedback).catch(() => {
+          fallbackCopyText(text);
+          successFeedback();
+        });
+      } else {
+        fallbackCopyText(text);
+        successFeedback();
+      }
+    }
+
+    function fallbackCopyText(text) {
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      textArea.style.position = "fixed";
+      textArea.style.left = "-999999px";
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      try {
+        document.execCommand('copy');
+      } catch (err) {
+        console.error('Fallback copy error', err);
+      }
+      document.body.removeChild(textArea);
     }
 
     function printAppealLetter() {
