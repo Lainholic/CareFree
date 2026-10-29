@@ -9,7 +9,7 @@ In the United States, over **100 million Americans struggle with medical debt**,
 
 **PainFree CarePay AI** bridges medical vision intelligence directly with **PayPal's financial ecosystem**:
 1. **Snap & Audit**: Patients photograph any US hospital bill or prescription receipt.
-2. **AI Protection**: Vision AI instantly translates cryptic CPT codes, validates insurance co-pays, and flags potential surprise out-of-network charges.
+2. **AI Protection**: Vision AI instantly translates cryptic CPT codes, validates insurance co-pays, and flags potential surprise out-of-network charges under the US *No Surprises Act*.
 3. **Frictionless Payment**: Patients can either split the remaining responsibility into **4 interest-free PayPal payments (Pay in 4)** or dispatch a **Family Caregiver Payment Link** so adult children can review and pay remotely in seconds.
 
 ---
@@ -17,16 +17,18 @@ In the United States, over **100 million Americans struggle with medical debt**,
 ## 🚀 Key Features
 
 ### 1. Vision AI Medical Bill Deconstruction
-- **NVIDIA Nemotron-3.5-Super-VL & 550B MoE Reasoning**: Reads complex tables, CPT procedure codes, NDC drug codes, and fee breakdowns from raw camera photos.
-- **Surprise Bill Guardrails**: Cross-checks billed amounts against regional median in-network benchmarks (aligning with the US *No Surprises Act*).
+- **NVIDIA Nemotron-3.5-Super-VL & Multimodal Pipeline**: Reads complex tables, CPT procedure codes, NDC drug codes, and fee breakdowns from raw camera photos.
+- **Surprise Bill Guardrails**: Cross-checks billed amounts against regional in-network benchmarks (aligning with the US *No Surprises Act*).
 
-### 2. PayPal Pay in 4 Financing
+### 2. PayPal Pay in 4 Financing ($30 to $1,500 Qualification)
 - Automatic installment scheduling: Splits heavy bills into 4 bi-weekly, interest-free payments (e.g., $180 total bill &rarr; 4 payments of $45 every two weeks).
+- Dynamically validates transaction eligibility according to PayPal guidelines ($30 to $1,500 range; smaller co-pays automatically fallback to standard single checkout).
 - Zero credit score impact, clear timeline visualization, and one-click authorization via PayPal Sandbox.
 
 ### 3. Family Caregiver Payment Portal (Remote Care)
 - Generates a secure, itemized web invoice link that aging patients can send to adult children or guardians via SMS or email.
 - The caregiver sees the exact breakdown, AI audit notes, and pays directly via PayPal without needing the physical paper bill.
+- Supports dynamic host headers for seamless LAN, localhost, and cloud deployment access.
 
 ---
 
@@ -39,17 +41,21 @@ flowchart LR
     C --> D{"Payment Choice"}
     D -->|"Direct Patient"| E["💳 PayPal Pay in 4 (4x Bi-Weekly)"]
     D -->|"Family Caregiver"| F["👨‍👩‍👧 Remote Invoice Link"]
-    E --> G["✅ PayPal Sandbox Capture"]
+    E --> G["✅ PayPal Sandbox Orders v2 Capture"]
     F --> G
 ```
 
 ---
 
-## 💻 Tech Stack
+## 💻 Tech Stack & Security Hardening
 - **Frontend**: Clean Vanilla HTML5 / CSS3 / JavaScript (Zero-bloat, high-performance responsive UI).
-- **Backend**: Python 3.10 HTTP Microservice (`app.py`), JSON REST API.
+  - *Hardened DOM*: Native element construction (`textContent`) to permanently eliminate stored/reflected XSS risks from OCR transcripts.
+  - *PayPal JS SDK*: Official Smart Buttons container with full lifecycle hooks (`createOrder`, `onApprove`, `onCancel`, `onError`).
+- **Backend**: Python 3.10 `http.server.ThreadingHTTPServer` microservice (`app.py`), JSON REST API.
+  - *Concurrent Async Execution*: Non-blocking thread pool handling long vision AI inferences and instant payment callbacks simultaneously.
+  - *Strict Validation*: 12MB max payload limit, path traversal defense via canonicalized path validation, and in-memory isolated deep copying.
 - **AI Vision Pipeline**: NVIDIA Nemotron-3.5-Super-VL / Qwen multimodal fallback (`receipt_pipeline.py`).
-- **Payments**: PayPal Developer Sandbox, Smart Payment Buttons, Orders v2 API.
+- **Payments**: PayPal Developer Sandbox, Smart Payment Buttons, Orders v2 API (`/v2/checkout/orders` create & capture).
 
 ---
 
@@ -57,7 +63,7 @@ flowchart LR
 
 ### 1. Requirements
 - Python 3.10+
-- Internet connection (for PayPal SDK and optional Nebius Vision API)
+- Modern Web Browser (Brave, Chrome, Edge)
 
 ### 2. Run with One-Click
 Double-click `run_carepay.bat` or run:

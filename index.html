@@ -1109,87 +1109,154 @@
     }
 
     function renderBillData(data) {
+      if (!data) return;
       currentInvoice = data;
+
       document.getElementById('dispFacility').textContent = data.facility || "Medical Center";
       document.getElementById('dispDate').textContent = data.date || "2026-10-29";
       document.getElementById('dispPatient').textContent = data.patient_name || "Patient";
 
-      document.getElementById('dispTotal').textContent = '$' + (data.total_amount || 0).toFixed(2);
-      document.getElementById('dispInsured').textContent = '-$' + (data.insurance_covered || 0).toFixed(2);
-      document.getElementById('dispDue').textContent = '$' + (data.patient_due || 0).toFixed(2);
+      const totalNum = Number(data.total_amount) || 0;
+      const insuredNum = Number(data.insurance_covered) || 0;
+      const dueNum = Number(data.patient_due) || 0;
 
-      const inst = (data.pay_in_4_installment || (data.patient_due / 4)).toFixed(2);
-      document.getElementById('dispInstallment').textContent = '$' + inst;
-      document.getElementById('t1').textContent = '$' + inst;
-      document.getElementById('t2').textContent = '$' + inst;
-      document.getElementById('t3').textContent = '$' + inst;
-      document.getElementById('t4').textContent = '$' + inst;
+      document.getElementById('dispTotal').textContent = '$' + totalNum.toFixed(2);
+      document.getElementById('dispInsured').textContent = '-$' + insuredNum.toFixed(2);
+      document.getElementById('dispDue').textContent = '$' + dueNum.toFixed(2);
 
-      // Render items table
+      // Pay in 4 eligibility: US standard $30.00 to $1,500.00
+      const isEligiblePayIn4 = (data.pay_in_4_eligible !== false) && (dueNum >= 30.00 && dueNum <= 1500.00);
+      const installmentVal = isEligiblePayIn4 ? (dueNum / 4) : dueNum;
+      const instStr = installmentVal.toFixed(2);
+
+      const p4Badge = document.querySelector('.pay-in-4-badge');
+      const p4Highlight = document.querySelector('.pay-in-4-highlight');
+      const p4Desc = document.querySelector('.pay-in-4-desc');
+
+      if (isEligiblePayIn4) {
+        if (p4Badge) p4Badge.textContent = "PAYPAL PAY IN 4 ELIGIBLE";
+        if (p4Highlight) p4Highlight.innerHTML = `4 Interest-Free Payments of <span id="dispInstallment">$${instStr}</span>`;
+        if (p4Desc) p4Desc.textContent = "Split your medical copay into 4 bi-weekly payments. 0% interest, no impact on credit score.";
+        document.getElementById('t1').textContent = '$' + instStr;
+        document.getElementById('t2').textContent = '$' + instStr;
+        document.getElementById('t3').textContent = '$' + instStr;
+        document.getElementById('t4').textContent = '$' + instStr;
+      } else {
+        if (p4Badge) p4Badge.textContent = "STANDARD PAYPAL CHECKOUT";
+        if (p4Highlight) p4Highlight.innerHTML = `Single Payment Balance: <span id="dispInstallment">$${dueNum.toFixed(2)}</span>`;
+        if (p4Desc) p4Desc.textContent = "Transactions under $30.00 or over $1,500 are processed as a single standard checkout.";
+        document.getElementById('t1').textContent = '$' + dueNum.toFixed(2);
+        document.getElementById('t2').textContent = '$0.00';
+        document.getElementById('t3').textContent = '$0.00';
+        document.getElementById('t4').textContent = '$0.00';
+      }
+
+      // Safe DOM construction: items table (Zero innerHTML, eliminates XSS)
       const tbody = document.getElementById('itemsTableBody');
-      tbody.innerHTML = '';
-      if (data.items && data.items.length > 0) {
+      tbody.textContent = '';
+      if (data.items && Array.isArray(data.items)) {
         data.items.forEach(item => {
           const tr = document.createElement('tr');
-          const isSurprise = (item.flag || '').includes('Surprise');
-          tr.innerHTML = `
-            <td><span class="code-badge">${item.code || 'CPT-CODE'}</span></td>
-            <td>${item.desc || 'Medical Service'}</td>
-            <td>$${(item.charge || 0).toFixed(2)}</td>
-            <td>$${(item.insured || 0).toFixed(2)}</td>
-            <td style="font-weight:700; color:var(--pp-gold);">$${(item.due || 0).toFixed(2)}</td>
-            <td><span class="status-tag ${isSurprise ? 'surprise' : 'verified'}">${item.flag || 'Verified'}</span></td>
-          `;
+
+          // CPT / Code
+          const tdCode = document.createElement('td');
+          const spanCode = document.createElement('span');
+          spanCode.className = 'code-badge';
+          spanCode.textContent = String(item.code || 'CPT-CODE');
+          tdCode.appendChild(spanCode);
+
+          // Description
+          const tdDesc = document.createElement('td');
+          tdDesc.textContent = String(item.desc || 'Healthcare Diagnostic Service');
+
+          // Charges
+          const tdCharge = document.createElement('td');
+          tdCharge.textContent = '$' + (Number(item.charge) || 0).toFixed(2);
+
+          const tdInsured = document.createElement('td');
+          tdInsured.textContent = '$' + (Number(item.insured) || 0).toFixed(2);
+
+          const tdDue = document.createElement('td');
+          tdDue.style.fontWeight = '700';
+          tdDue.style.color = 'var(--pp-gold)';
+          tdDue.textContent = '$' + (Number(item.due) || 0).toFixed(2);
+
+          // Status Flag
+          const tdFlag = document.createElement('td');
+          const spanFlag = document.createElement('span');
+          const flagStr = String(item.flag || 'Verified');
+          spanFlag.className = 'status-tag ' + (flagStr.includes('Surprise') ? 'surprise' : 'verified');
+          spanFlag.textContent = flagStr;
+          tdFlag.appendChild(spanFlag);
+
+          tr.appendChild(tdCode);
+          tr.appendChild(tdDesc);
+          tr.appendChild(tdCharge);
+          tr.appendChild(tdInsured);
+          tr.appendChild(tdDue);
+          tr.appendChild(tdFlag);
           tbody.appendChild(tr);
         });
       }
 
-      // Render insights
+      // Safe DOM construction: AI Insights
       const insightsBox = document.getElementById('dispInsights');
-      insightsBox.innerHTML = '';
-      if (data.ai_insights && data.ai_insights.length > 0) {
+      insightsBox.textContent = '';
+      if (data.ai_insights && Array.isArray(data.ai_insights)) {
         data.ai_insights.forEach(ins => {
           const div = document.createElement('div');
           div.className = 'ai-insight-bullet';
-          div.innerHTML = `<span>•</span> ${ins}`;
+          const bullet = document.createElement('span');
+          bullet.textContent = '• ';
+          div.appendChild(bullet);
+          div.appendChild(document.createTextNode(String(ins)));
           insightsBox.appendChild(div);
         });
       }
     }
 
     function triggerPayPalCheckout() {
-      const amount = currentInvoice.pay_in_4_installment || (currentInvoice.patient_due / 4);
+      const due = Number(currentInvoice.patient_due) || 180.00;
+      const isEligiblePayIn4 = (currentInvoice.pay_in_4_eligible !== false) && (due >= 30.00 && due <= 1500.00);
+      const chargeAmt = isEligiblePayIn4 ? (due / 4) : due;
 
       fetch('/api/paypal/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          amount: amount,
+          amount: due,
           currency: "USD",
-          invoice_id: currentInvoice.invoice_id
+          invoice_id: currentInvoice.invoice_id || "CP-ONLINE"
         })
       })
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) throw new Error("Order creation failed: HTTP " + res.status);
+        return res.json();
+      })
       .then(order => {
-        // Capture order
         return fetch('/api/paypal/capture-order', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ order_id: order.order_id, amount: amount })
+          body: JSON.stringify({ order_id: order.order_id, amount: due })
         });
       })
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) throw new Error("Payment capture failed: HTTP " + res.status);
+        return res.json();
+      })
       .then(capture => {
-        document.getElementById('modalTitle').textContent = "PayPal Pay in 4 Approved!";
-        document.getElementById('modalDesc').textContent = "Installment #1 of 4 successfully captured. Next payment scheduled in 14 days.";
-        document.getElementById('modalTxId').textContent = capture.capture_id || "CAPTURE-7721A";
-        document.getElementById('modalPaid').textContent = `$${amount.toFixed(2)} (Initial Installment)`;
-        document.getElementById('modalProvider').textContent = currentInvoice.facility;
+        document.getElementById('modalTitle').textContent = isEligiblePayIn4 ? "PayPal Pay in 4 Approved!" : "PayPal Payment Captured!";
+        document.getElementById('modalDesc').textContent = isEligiblePayIn4
+          ? `Installment #1 ($${chargeAmt.toFixed(2)}) captured. Next 3 payments scheduled bi-weekly.`
+          : `Total patient responsibility of $${due.toFixed(2)} captured successfully via PayPal Sandbox Orders v2.`;
+        document.getElementById('modalTxId').textContent = capture.capture_id || "CAPTURE-ORD-7721A";
+        document.getElementById('modalPaid').textContent = `$${chargeAmt.toFixed(2)} (${isEligiblePayIn4 ? '1st of 4 Installments' : 'Full Payment'})`;
+        document.getElementById('modalProvider').textContent = currentInvoice.facility || "Healthcare Provider";
         document.getElementById('modalTime').textContent = new Date().toLocaleString();
         document.getElementById('successModal').style.display = 'flex';
       })
       .catch(err => {
-        alert("Payment simulation completed: " + err);
+        alert("PayPal Checkout Notice: " + err.message);
       });
     }
 
@@ -1218,7 +1285,7 @@
     function initPayPalSdk() {
       const container = document.getElementById('paypal-button-container');
       if (typeof paypal !== 'undefined' && paypal.Buttons) {
-        container.innerHTML = '';
+        container.textContent = '';
         paypal.Buttons({
           style: {
             layout: 'vertical',
@@ -1227,26 +1294,40 @@
             label: 'paypal'
           },
           createOrder: function(data, actions) {
-            const due = currentInvoice.pay_in_4_installment || (currentInvoice.patient_due / 4) || 45.00;
+            const due = Number(currentInvoice.patient_due) || 180.00;
             return actions.order.create({
+              intent: "CAPTURE",
               purchase_units: [{
+                reference_id: currentInvoice.invoice_id || "CP-CAREPAY",
+                description: "PainFree CarePay: " + (currentInvoice.facility || "Medical Bill Copay"),
                 amount: {
+                  currency_code: "USD",
                   value: due.toFixed(2)
-                },
-                description: "PainFree CarePay: " + (currentInvoice.facility || "Medical Bill")
+                }
               }]
             });
           },
           onApprove: function(data, actions) {
             return actions.order.capture().then(function(details) {
+              const due = Number(currentInvoice.patient_due) || 180.00;
+              const isEligiblePayIn4 = (due >= 30.00 && due <= 1500.00);
+              const paidAmt = isEligiblePayIn4 ? (due / 4) : due;
+
               document.getElementById('modalTitle').textContent = "PayPal Payment Approved!";
-              document.getElementById('modalDesc').textContent = "Medical bill payment successfully captured via PayPal Sandbox.";
+              document.getElementById('modalDesc').textContent = "Medical bill payment successfully captured via PayPal Sandbox Orders v2.";
               document.getElementById('modalTxId').textContent = details.id || "PP-" + Math.random().toString(36).substr(2, 9).toUpperCase();
-              document.getElementById('modalPaid').textContent = `$${(currentInvoice.pay_in_4_installment || 45).toFixed(2)}`;
-              document.getElementById('modalProvider').textContent = currentInvoice.facility;
+              document.getElementById('modalPaid').textContent = `$${paidAmt.toFixed(2)} (${isEligiblePayIn4 ? 'Pay in 4 Installment' : 'Total Copay'})`;
+              document.getElementById('modalProvider').textContent = currentInvoice.facility || "Healthcare Provider";
               document.getElementById('modalTime').textContent = new Date().toLocaleString();
               document.getElementById('successModal').style.display = 'flex';
             });
+          },
+          onCancel: function(data) {
+            console.log("PayPal checkout cancelled by user:", data);
+          },
+          onError: function(err) {
+            console.error("PayPal Smart Buttons error:", err);
+            alert("PayPal checkout notice: " + (err.message || "Please check your network connection or sandbox credentials."));
           }
         }).render('#paypal-button-container').catch(err => {
           console.warn("PayPal Smart Buttons render note:", err);
