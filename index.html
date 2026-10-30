@@ -1292,13 +1292,13 @@
     <!-- Hero Banner -->
     <div class="hero-banner">
       <div class="hero-content">
-        <h2>Decode Surprise Medical Bills. Split or Share Instantly.</h2>
-        <p>Snap a photo of any US hospital bill or prescription receipt. Our vision agent translates complex CPT/NDC codes into clear language, protects against surprise charges, and gives you instant 4-installment zero-interest PayPal financing or remote caregiver bill sharing.</p>
+        <h2>Decode Medical Bills. Split or Share with Clarity.</h2>
+        <p>Snap a photo of any US hospital bill or prescription receipt. Our vision agent translates CPT/NDC codes into plain language, highlights items for patient billing inquiry, and illustrates 4-payment PayPal Pay Later options (eligibility determined by PayPal at checkout) or remote caregiver bill sharing.</p>
       </div>
       <div class="hero-stats">
         <div class="stat-item">
-          <div class="stat-num">0%</div>
-          <div class="stat-label">Pay in 4 Interest</div>
+          <div class="stat-num">4-Pay</div>
+          <div class="stat-label">Pay Later Option</div>
         </div>
         <div class="stat-item">
           <div class="stat-num">&lt;3s</div>
@@ -1477,8 +1477,8 @@
                   <td>$60.00</td>
                   <td>$30.00</td>
                   <td>
-                    <span class="status-tag surprise" style="cursor:pointer;" onclick="openAppealModal('CPT 96372')" title="Click to view legal dispute letter">Surprise Guarded</span>
-                    <button class="dispute-inline-btn" onclick="openAppealModal('CPT 96372')">⚖️ Dispute</button>
+                    <span class="status-tag surprise" style="cursor:pointer;" onclick="openAppealModal('CPT 96372')" title="Click to view patient inquiry draft">Surprise Guarded</span>
+                    <button class="dispute-inline-btn" onclick="openAppealModal('CPT 96372')">⚖️ Inquiry</button>
                   </td>
                 </tr>
               </tbody>
@@ -1486,14 +1486,14 @@
           </div>
 
           <div class="ai-insights-box">
-            <div class="ai-insights-header">💡 AI Patient Protection & Benchmark Insights</div>
+            <div class="ai-insights-header">💡 AI Bill Review & Illustrative Reference Insights</div>
             <div id="dispInsights">
               <div class="ai-insight-bullet">
                 <span>•</span>
-                <span>No Surprises Act Protection: CPT 96372 audited. <a href="javascript:void(0)" onclick="openAppealModal()" style="color:#38bdf8; text-decoration:underline; font-weight:700; margin-left:4px;">[Review Dispute Letter ⚖️]</a></span>
+                <span>Billing Inquiry Context: CPT 96372 flagged for review. <a href="javascript:void(0)" onclick="openAppealModal()" style="color:#38bdf8; text-decoration:underline; font-weight:700; margin-left:4px;">[Review Inquiry Draft ⚖️]</a></span>
               </div>
-              <div class="ai-insight-bullet"><span>•</span> Eligible for PayPal Pay in 4: Split this $180.00 bill into 4 interest-free bi-weekly payments of $45.00.</div>
-              <div class="ai-insight-bullet"><span>•</span> Family Share Ready: Generate remote caregiver payment invoice with 1 click.</div>
+              <div class="ai-insight-bullet"><span>•</span> PayPal Pay in 4 Option: Estimated 4 bi-weekly payments of $45.00 (Final eligibility determined by PayPal at checkout).</div>
+              <div class="ai-insight-bullet"><span>•</span> Family Share Ready: Generate a privacy-minimized caregiver payment link with 1 click.</div>
             </div>
           </div>
 
@@ -1502,12 +1502,12 @@
             <div class="appeal-banner-content">
               <div class="appeal-banner-title">
                 <span class="appeal-shield">⚖️</span>
-                <span id="appealBannerTitle">No Surprises Act Dispute Assistant</span>
+                <span id="appealBannerTitle">Patient Billing Inquiry Draft Assistant</span>
               </div>
-              <p id="appealBannerDesc">Detected potential balance billing (CPT 96372). Generate an audit-ready formal inquiry letter under 45 CFR § 149.410 to dispute out-of-network balance charges.</p>
+              <p id="appealBannerDesc">Flagged item (CPT 96372) exceeds illustrative reference values. Generate an educational patient inquiry draft referencing 45 CFR § 149.410 to request an itemized review.</p>
             </div>
             <button class="appeal-btn" id="btnGenAppeal" onclick="openAppealModal()">
-              📄 Generate Dispute Letter
+              📄 Generate Inquiry Draft
             </button>
           </div>
         </div>
@@ -1518,9 +1518,9 @@
         <div class="checkout-hub">
           <!-- PayPal Pay in 4 Card -->
           <div class="pay-in-4-card">
-            <div class="pay-in-4-badge">PAYPAL PAY IN 4</div>
-            <div class="pay-in-4-highlight">4 payments of <span id="dispInstallment">$45.00</span></div>
-            <div class="pay-in-4-desc">No interest, no impact on credit score, and no late fees.</div>
+            <div class="pay-in-4-badge">PAYPAL PAY IN 4 ILLUSTRATION</div>
+            <div class="pay-in-4-highlight">4 estimated payments of <span id="dispInstallment">$45.00</span></div>
+            <div class="pay-in-4-desc">Estimated bi-weekly schedule. Eligibility and final terms are determined by PayPal at checkout.</div>
 
             <div class="installment-timeline">
               <div class="timeline-step">
@@ -1614,19 +1614,19 @@
         <div class="appeal-modal-title">
           <span style="font-size:24px;">⚖️</span>
           <div>
-            <h3 id="appealModalTitle" style="margin:0; font-size:18px;">Official Dispute Letter Preview</h3>
-            <p id="appealModalSub" style="margin:0; font-size:12px; color:var(--text-muted);">US No Surprises Act (45 CFR § 149.410 / § 149.420)</p>
+            <h3 id="appealModalTitle" style="margin:0; font-size:18px;">Patient Billing Inquiry Draft Preview</h3>
+            <p id="appealModalSub" style="margin:0; font-size:12px; color:var(--text-muted);">US No Surprises Act Context (45 CFR § 149.410 / § 149.420)</p>
           </div>
         </div>
         <button class="modal-close-x" onclick="closeAppealModal()" title="Close">&times;</button>
       </div>
 
       <div class="legal-disclaimer-box" id="appealDisclaimer" style="margin-bottom: 12px; padding: 10px 14px; background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 8px; font-size: 11px; line-height: 1.5; color: #fde68a;">
-        ⚠️ <strong>Notice:</strong> AI-generated draft for patient review. Not legal, medical, or tax/financial advice. CMS fee schedule is a Medicare reference benchmark; QPA must be calculated by your plan/issuer under the No Surprises Act.
+        ⚠️ <strong>Notice:</strong> AI-generated communication draft for patient review. Not legal, medical, or tax/financial advice. CMS-style figures are illustrative reference values; QPA must be calculated by your plan/issuer under the No Surprises Act.
       </div>
 
       <div class="letter-sheet" id="letterSheet">
-        <pre id="appealLetterText">Generating dispute letter...</pre>
+        <pre id="appealLetterText">Generating patient inquiry draft...</pre>
       </div>
 
       <div class="appeal-modal-actions">
@@ -1680,10 +1680,10 @@
     const TRANSLATIONS = {
       en: {
         tagline: "Medical Bill Vision Intelligence & PayPal Family Checkout",
-        heroH2: "Decode Surprise Medical Bills. Split or Share Instantly.",
-        heroP: "Snap a photo of any US hospital bill or prescription receipt. Our vision agent translates complex CPT/NDC codes into clear language, protects against surprise charges, and gives you instant 4-installment zero-interest PayPal financing or remote caregiver bill sharing.",
+        heroH2: "Decode Medical Bills. Split or Share with Clarity.",
+        heroP: "Snap a photo of any US hospital bill or prescription receipt. Our vision agent translates CPT/NDC codes into plain language, highlights items for patient billing inquiry, and illustrates 4-payment PayPal Pay Later options (eligibility determined by PayPal at checkout) or remote caregiver bill sharing.",
         col1Title: "📁 1. Select or Upload Bill",
-        col2Title: "🩺 2. AI Bill Audit & Breakdown",
+        col2Title: "🩺 2. AI Bill Review & Breakdown",
         col3Title: "💳 3. PayPal Pay in 4 & Share",
         desktopUploadH4: "Drag & drop medical bill here",
         desktopUploadP: "or click to browse files from your computer",
@@ -1691,12 +1691,12 @@
         mobileUploadP: "Select from gallery or snap a photo:",
         mobGalleryBtn: "🖼️ Photo Gallery",
         mobCameraBtn: "📷 Snap Camera",
-        appealBannerTitle: "No Surprises Act Dispute Assistant",
-        appealBannerDesc: "Detected potential balance billing (CPT 96372). Generate an audit-ready formal inquiry letter under 45 CFR § 149.410 to dispute out-of-network balance charges.",
-        btnGenAppeal: "📄 Generate Dispute Letter",
-        appealModalTitle: "Official Dispute Letter Preview",
-        appealModalSub: "US No Surprises Act (45 CFR § 149.410 / § 149.420)",
-        appealDisclaimer: "⚠️ Notice: AI-generated draft for patient review. Not legal, medical, or tax/financial advice. CMS fee schedule is a Medicare reference benchmark; QPA must be calculated by your plan/issuer under the No Surprises Act.",
+        appealBannerTitle: "Patient Billing Inquiry Draft Assistant",
+        appealBannerDesc: "Flagged item (CPT 96372) exceeds illustrative reference values. Generate an educational patient inquiry draft referencing 45 CFR § 149.410 to request an itemized review.",
+        btnGenAppeal: "📄 Generate Inquiry Draft",
+        appealModalTitle: "Patient Billing Inquiry Draft Preview",
+        appealModalSub: "US No Surprises Act Context (45 CFR § 149.410 / § 149.420)",
+        appealDisclaimer: "⚠️ Notice: AI-generated communication draft for patient review. Not legal, medical, or tax/financial advice. CMS-style figures are illustrative reference values; QPA must be calculated by your plan/issuer under the No Surprises Act.",
         payIn4Disclaimer: "ℹ️ Estimated installment. Eligibility and final terms are determined by PayPal at checkout.",
         btnCopyAppeal: "📋 Copy to Clipboard",
         btnPrintAppeal: "🖨️ Print / Save PDF",
@@ -1704,16 +1704,16 @@
         btnOpenHsaSlip: "🧾 View IRS Pub 502 Tax Substantiation Slip",
         btnCopyHsa: "📋 Copy Evidence Slip",
         caregiverTitle: "👨‍👩‍👧 Family Caregiver Link",
-        caregiverP: "Send an itemized invoice link to a daughter, son, or guardian so they can review and pay remotely.",
-        caregiverBtn: "🔗 Generate Caregiver Request Link",
-        fallbackPayBtn: "💳 Instant Sandbox Pay in 4 Test"
+        caregiverP: "Send a privacy-minimized invoice link to a family member so they can review and contribute remotely.",
+        caregiverBtn: "🔗 Generate Privacy-Minimized Link",
+        fallbackPayBtn: "💳 Authorize via PayPal Smart Buttons"
       },
       ko: {
         tagline: "의료비 영수증 비전 AI 판독 및 PayPal 가족 분할 결제",
-        heroH2: "미국 병원비 영수증 AI 판독. 무이자 분할 또는 가족 대리 결제.",
-        heroP: "미국 병원비 영수증이나 처방전 사진을 올리면 AI가 난해한 CPT/NDC 코드를 분석하고, 부당 과다 청구를 방지하며, PayPal 4회 무이자 분할 납부(Pay in 4) 또는 가족 원격 대리 결제 링크를 즉시 연결합니다.",
+        heroH2: "미국 병원비 영수증 AI 판독. 분할 결제 안내 및 가족 공유.",
+        heroP: "미국 병원비 영수증이나 처방전 사진을 올리면 AI가 CPT/NDC 코드를 알기 쉽게 풀이하고, 병원 확인이 필요한 항목의 문의 초안을 작성하며, PayPal 4회 분할 납부(Pay in 4, 최종 자격은 결제 시 PayPal 심사) 또는 가족 원격 대리 결제 링크를 연결합니다.",
         col1Title: "📁 1. 영수증 선택 및 추가",
-        col2Title: "🩺 2. AI 진단 및 항목 분석",
+        col2Title: "🩺 2. AI 항목 분석 및 참고가 비교",
         col3Title: "💳 3. PayPal 결제 및 가족 공유",
         desktopUploadH4: "영수증 파일을 여기에 끌어다 놓으세요",
         desktopUploadP: "또는 클릭하여 컴퓨터에서 파일 선택",
@@ -1721,22 +1721,22 @@
         mobileUploadP: "갤러리에서 선택하거나 직접 촬영하세요:",
         mobGalleryBtn: "🖼️ 갤러리",
         mobCameraBtn: "📷 카메라",
-        appealBannerTitle: "미국 부당 의료비 이의신청 AI 지원",
-        appealBannerDesc: "과다/부당 청구(CPT 96372) 감지됨. 미국 연방법 No Surprises Act(45 CFR § 149.410)에 의거한 공식 병원 이의신청 질의서를 즉시 생성합니다.",
-        btnGenAppeal: "📄 공식 이의신청서 생성",
-        appealModalTitle: "병원 제출용 공식 이의신청서 미리보기",
-        appealModalSub: "미국 No Surprises Act 법률 규격 (45 CFR § 149.410 / § 149.420)",
-        appealDisclaimer: "⚠️ 안내: 본 문서는 환자 검토용 AI 질의 초안이며 법률·의료·재무 자문이 아닙니다. CMS 수가는 메디케어 참고 기준가이며, No Surprises Act에 따른 공정지불금액(QPA)은 환자의 보험사가 직접 산출해야 합니다.",
+        appealBannerTitle: "환자용 병원 청구 문의 초안 도우미",
+        appealBannerDesc: "검토 필요 항목(CPT 96372) 감지됨. 미국 No Surprises Act(45 CFR § 149.410) 관련 항목별 내역 확인을 요청하는 환자용 문의 초안을 생성합니다.",
+        btnGenAppeal: "📄 청구 문의 초안 생성",
+        appealModalTitle: "환자용 병원 청구 문의 초안 미리보기",
+        appealModalSub: "미국 No Surprises Act 참고 안내 (45 CFR § 149.410 / § 149.420)",
+        appealDisclaimer: "⚠️ 안내: 본 문서는 환자 검토용 AI 의사소통 초안이며 법률·의료·세무 자문이 아닙니다. CMS 참고 수가는 비교용 예시 수치이며, No Surprises Act에 따른 공정지불금액(QPA)은 환자의 보험사가 산출합니다.",
         payIn4Disclaimer: "ℹ️ 예상 분할 납부액입니다. 최종 자격 및 이용 조건은 결제 시 PayPal이 심사하여 결정합니다.",
         btnCopyAppeal: "📋 클립보드에 복사",
         btnPrintAppeal: "🖨️ 인쇄 / PDF 저장",
         btnCloseAppeal: "닫기",
-        btnOpenHsaSlip: "🧾 IRS 502 세무 소명 및 HSA 증빙 슬립 보기",
+        btnOpenHsaSlip: "🧾 IRS 502 세무 참고 및 HSA 증빙 슬립 보기",
         btnCopyHsa: "📋 증빙 슬립 복사",
         caregiverTitle: "👨‍👩‍👧 가족 간병인 원격 결제 링크",
-        caregiverP: "타지에 있는 자녀나 보호자에게 상세 청구서 링크를 보내 원격으로 확인하고 PayPal로 대신 결제하도록 요청합니다.",
-        caregiverBtn: "🔗 간병인 결제 요청 링크 생성",
-        fallbackPayBtn: "💳 샌드박스 Pay in 4 즉시 결제"
+        caregiverP: "가족이나 보호자에게 개인정보 최소화 링크를 공유하여 원격으로 PayPal Sandbox 분담 결제를 진행할 수 있습니다.",
+        caregiverBtn: "🔗 개인정보 최소화 링크 생성",
+        fallbackPayBtn: "💳 PayPal 스마트 버튼으로 결제 진행"
       }
     };
 
@@ -1902,7 +1902,7 @@
         : remDue;
 
       let dueNum = isVerifiedOnly ? verDue : remDue;
-      if (!isVerifiedOnly && (currentCaregiverSplitPercent < 100 || Boolean(currentInvoice.caregiver_token))) {
+      if (currentCaregiverSplitPercent < 100 || Boolean(currentInvoice.caregiver_token)) {
         dueNum = dueNum > 0
           ? Math.max(1.00, Math.min(dueNum, Number((dueNum * (currentCaregiverSplitPercent / 100)).toFixed(2))))
           : 0.00;
@@ -1982,7 +1982,7 @@
       });
     }
 
-    function maskIdentifierHeaderOnCanvas(rawDataUrl, callback) {
+    function maskIdentifierHeaderOnCanvas(rawDataUrl, onSuccess, onError) {
       const img = new Image();
       img.onload = function() {
         try {
@@ -1990,6 +1990,10 @@
           canvas.width = img.width || 800;
           canvas.height = img.height || 1000;
           const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            onError("Browser canvas 2D context is unavailable; upload aborted to preserve client-side masking.");
+            return;
+          }
           ctx.drawImage(img, 0, 0);
           // Client-side privacy minimization: mask top patient/MRN identifier zone on canvas before transmission
           const maskHeight = Math.max(28, Math.round(canvas.height * 0.08));
@@ -1998,12 +2002,19 @@
           ctx.fillStyle = '#38bdf8';
           ctx.font = 'bold ' + Math.max(11, Math.round(maskHeight * 0.35)) + 'px sans-serif';
           ctx.fillText('CLIENT-SIDE PRIVACY MASKED HEADER (DIRECT IDENTIFIERS REDACTED)', 12, Math.round(maskHeight * 0.65));
-          callback(canvas.toDataURL('image/jpeg', 0.92));
+          const maskedUrl = canvas.toDataURL('image/jpeg', 0.92);
+          if (!maskedUrl || !maskedUrl.startsWith('data:image/')) {
+            onError("Canvas redaction output was invalid; upload aborted.");
+            return;
+          }
+          onSuccess(maskedUrl);
         } catch (err) {
-          callback(rawDataUrl);
+          onError("Client-side privacy header masking failed; upload aborted.");
         }
       };
-      img.onerror = function() { callback(rawDataUrl); };
+      img.onerror = function() {
+        onError("Selected file could not be decoded as an image for client-side canvas masking; upload aborted.");
+      };
       img.src = rawDataUrl;
     }
 
@@ -2013,29 +2024,36 @@
 
       const reader = new FileReader();
       reader.onload = function(e) {
-        maskIdentifierHeaderOnCanvas(e.target.result, function(maskedDataUrl) {
-          document.getElementById('billPreview').src = maskedDataUrl;
-          document.getElementById('scanLaser').style.display = 'block';
+        maskIdentifierHeaderOnCanvas(
+          e.target.result,
+          function(maskedDataUrl) {
+            document.getElementById('billPreview').src = maskedDataUrl;
+            document.getElementById('scanLaser').style.display = 'block';
 
-          fetch('/api/analyze', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ image_base64: maskedDataUrl })
-          })
-          .then(res => res.json())
-          .then(res => {
+            fetch('/api/analyze', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ image_base64: maskedDataUrl })
+            })
+            .then(res => res.json())
+            .then(res => {
+              document.getElementById('scanLaser').style.display = 'none';
+              if (res.success && res.data) {
+                renderBillData(res.data);
+              } else {
+                alert("Analysis Notice: " + (res.message || res.error || "Could not extract itemized lines."));
+              }
+            })
+            .catch(err => {
+              document.getElementById('scanLaser').style.display = 'none';
+              console.error("Upload error:", err);
+            });
+          },
+          function(errMsg) {
             document.getElementById('scanLaser').style.display = 'none';
-            if (res.success && res.data) {
-              renderBillData(res.data);
-            } else {
-              alert("Analysis Notice: " + (res.message || res.error || "Could not extract itemized lines."));
-            }
-          })
-          .catch(err => {
-            document.getElementById('scanLaser').style.display = 'none';
-            console.error("Upload error:", err);
-          });
-        });
+            alert("Privacy Masking Notice: " + errMsg);
+          }
+        );
       };
       reader.readAsDataURL(file);
     }
@@ -2168,14 +2186,14 @@
           if (isSurprise) {
             spanFlag.style.cursor = 'pointer';
             spanFlag.onclick = () => openAppealModal(item.code);
-            spanFlag.title = 'Click to view official dispute letter for ' + (item.code || 'this service');
+            spanFlag.title = 'Click to view patient inquiry draft for ' + (item.code || 'this service');
           }
           tdFlag.appendChild(spanFlag);
 
           if (isSurprise) {
             const disputeBtn = document.createElement('button');
             disputeBtn.className = 'dispute-inline-btn';
-            disputeBtn.textContent = '⚖️ Dispute';
+            disputeBtn.textContent = '⚖️ Inquiry';
             disputeBtn.onclick = (e) => { e.stopPropagation(); openAppealModal(item.code); };
             tdFlag.appendChild(document.createTextNode(' '));
             tdFlag.appendChild(disputeBtn);
@@ -2508,6 +2526,7 @@
               invoice_id: currentInvoice.invoice_id,
               caregiver_token: currentInvoice.caregiver_token || "",
               mode: reqMode,
+              base_mode: currentSettleMode,
               split_percent: currentCaregiverSplitPercent,
               amount: activeAmt
             };
@@ -2590,7 +2609,7 @@
       const mode = urlParams.get('mode');
 
       if (cgToken) {
-        // High-entropy decoupled caregiver bearer token (Safe Harbor compliant)
+        // Opaque tokenized caregiver bearer link (privacy-minimized view)
         fetch('/api/caregiver-invoice/' + encodeURIComponent(cgToken))
           .then(res => res.json())
           .then(res => {

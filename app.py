@@ -422,18 +422,19 @@ def get_paypal_token():
         return None
 
 
-def create_paypal_order(amount, currency="USD", invoice_id="", payment_mode="full"):
+def create_paypal_order(amount, currency="USD", invoice_id="", payment_mode="full", display_id=""):
     token = get_paypal_token()
+    ref_id = str(display_id or invoice_id).strip()
     if token:
         try:
             url = f"{PAYPAL_API_BASE}/v2/checkout/orders"
-            idempotency_key = f"{invoice_id}-{payment_mode}-{uuid.uuid4()}"
+            idempotency_key = f"{ref_id}-{payment_mode}-{uuid.uuid4()}"
             payload = {
                 "intent": "CAPTURE",
                 "purchase_units": [
                     {
-                        "reference_id": invoice_id,
-                        "description": f"PainFree CarePay - Medical Invoice {invoice_id} ({payment_mode})",
+                        "reference_id": ref_id,
+                        "description": f"PainFree CarePay - Medical Reference {ref_id} ({payment_mode})",
                         "amount": {
                             "currency_code": currency,
                             "value": f"{amount:.2f}"
@@ -470,6 +471,7 @@ def create_paypal_order(amount, currency="USD", invoice_id="", payment_mode="ful
                 with LEDGER_LOCK:
                     ORDER_TO_INVOICE[order_id] = {
                         "invoice_id": invoice_id,
+                        "display_id": ref_id,
                         "amount": to_money(amount),
                         "currency": currency,
                         "payment_mode": payment_mode,
@@ -480,11 +482,11 @@ def create_paypal_order(amount, currency="USD", invoice_id="", payment_mode="ful
                 return {
                     "success": True,
                     "order_id": order_id,
+                    "reference_id": ref_id,
                     "status": res_data.get("status", "CREATED"),
                     "authorized_amount": to_money(amount),
                     "payment_mode": payment_mode,
-                    "mode": "live_paypal_sandbox",
-                    "raw_order": res_data
+                    "mode": "live_paypal_sandbox"
                 }
         except Exception as e:
             print(f"[PayPal Create Order Error] {e}")
@@ -740,11 +742,10 @@ def capture_paypal_order(order_id):
                         "order_id": order_id,
                         "status": "COMPLETED",
                         "settlement_status": settlement_status,
-                        "invoice_id": invoice_id,
+                        "invoice_id": order_meta.get("display_id", invoice_id),
                         "captured_amount": captured_amount,
                         "payment_mode": payment_mode,
-                        "mode": "live_paypal_sandbox",
-                        "raw_capture": res_data
+                        "mode": "live_paypal_sandbox"
                     }
             except Exception as e:
                 print(f"[PayPal Capture Order Error] {e}")
@@ -925,19 +926,36 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
                                 "flag": "Caregiver Co-Pay Contribution View"
                             })
                         
-                        caregiver_inv = copy.deepcopy(raw_inv)
-                        caregiver_inv["invoice_id"] = raw_target
-                        caregiver_inv["facility"] = "Verified Healthcare Facility (Privacy-Minimized)"
-                        caregiver_inv["date"] = year_only
-                        caregiver_inv["patient_name"] = "Protected Patient (Privacy-Minimized View)"
-                        caregiver_inv["items"] = masked_items
-                        caregiver_inv["disputed_due"] = 0.0
-                        caregiver_inv["hipaa_privacy_mode"] = True
-                        caregiver_inv["privacy_minimized_mode"] = True
-                        caregiver_inv["ai_insights"] = [
-                            "🛡️ Privacy-Minimized Caregiver Shield Active: Clinical diagnoses & drug identifiers masked for caregiver contribution.",
-                            "Collaborative Family Checkout: Family members can contribute to the copay via PayPal, Pay Later, or Venmo Sandbox without viewing full diagnostic details."
-                        ]
+                        orig_due = to_money(raw_inv.get("patient_due", 0.0))
+                        rem_due = to_money(raw_inv.get("remaining_patient_due", orig_due))
+                        fam_contrib = to_money(raw_inv.get("family_contributions_total", raw_inv.get("total_captured_amount", 0.0)))
+                        contrib_cnt = int(raw_inv.get("family_contributions_count", len(raw_inv.get("captures", []))))
+                        caregiver_inv = {
+                            "invoice_id": raw_target,
+                            "facility": "Verified Healthcare Facility (Privacy-Minimized)",
+                            "date": year_only,
+                            "currency": raw_inv.get("currency", "USD"),
+                            "patient_name": "Protected Patient (Privacy-Minimized View)",
+                            "total_amount": raw_inv.get("total_amount", 0.0),
+                            "insurance_covered": raw_inv.get("insurance_covered", 0.0),
+                            "original_patient_due": orig_due,
+                            "patient_due": rem_due,
+                            "verified_due": rem_due,
+                            "disputed_due": 0.0,
+                            "remaining_patient_due": rem_due,
+                            "family_contributions_total": fam_contrib,
+                            "contributions_count": contrib_cnt,
+                            "pay_in_4_eligible": (rem_due >= 30.00 and rem_due <= 1500.00),
+                            "pay_in_4_installment": to_money(rem_due / 4.0) if (rem_due >= 30.00 and rem_due <= 1500.00) else rem_due,
+                            "status": raw_inv.get("status", "UNPAID"),
+                            "hipaa_privacy_mode": True,
+                            "privacy_minimized_mode": True,
+                            "items": masked_items,
+                            "ai_insights": [
+                                "🛡️ Privacy-Minimized Caregiver Shield Active: Clinical diagnoses & drug identifiers masked for caregiver contribution.",
+                                "Collaborative Family Checkout: Family members can contribute to the copay via PayPal, Pay Later, or Venmo Sandbox without viewing full diagnostic details."
+                            ]
+                        }
                         self.send_json({"success": True, "invoice": caregiver_inv, "privacy_mode": True})
                     else:
                         self.send_json({"success": True, "invoice": raw_inv, "privacy_mode": False})
@@ -1189,7 +1207,7 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
                             f"Live Vision Transcription: {len(lines)} line items parsed via NVIDIA Nemotron-3.5-Super-VL.",
                             f"Smart Review & Partial Settle: Flagged balance for inquiry: ${disputed_due:.2f}, Undisputed balance: ${verified_due:.2f}.",
                             f"HSA/FSA Educational Estimate: ${hsa_el:.2f} pre-screened as potentially qualified medical expenses under IRC § 213(d).",
-                            f"Pay in 4 Status: {'Eligible ($30-$1,500 range) - 4 bi-weekly payments of $' + str(installment) if pay_in_4_eligible else 'Single payment only (under $30 threshold)'}.",
+                            f"PayPal Pay in 4 Option: {'Estimated 4 bi-weekly payments of $' + str(installment) + ' (Final eligibility determined by PayPal at checkout)' if pay_in_4_eligible else 'Single payment checkout (under $30 threshold)'}.",
                             "Illustrative CMS Reference Context: Itemized charges compared against illustrative CMS-style reference values."
                         ]
                     }
@@ -1226,8 +1244,10 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
 
             if cg_meta is not None:
                 invoice_id = cg_meta["invoice_id"] if isinstance(cg_meta, dict) else cg_meta
+                display_id = cg_token
             else:
                 invoice_id = raw_id
+                display_id = invoice_id
 
             # Strict server price authority: invoice MUST exist in authorized INVOICE_STORE!
             if not invoice_id or invoice_id not in INVOICE_STORE:
@@ -1253,21 +1273,27 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
 
             currency = str(record.get("currency", "USD")).strip() or "USD"
             mode = str(body.get("mode", "full")).strip().lower()
+            base_mode = str(body.get("base_mode", mode)).strip().lower()
             if cg_meta is not None:
-                # Any caregiver token checkout (including 100% full support) is tracked in the family contribution ledger
+                # Any caregiver token checkout (including 100% full support) is tracked in the family contribution ledger against remaining due
                 mode = "family_split"
+                base_mode = "full"
 
-            # Server-enforced amount authority based on payment mode:
-            if mode == "verified_only":
-                amount = to_money(record.get("verified_due", 0.0))
-                if amount <= 0.0:
+            # Canonical base balance (verified_due when base_mode == 'verified_only', otherwise remaining_patient_due)
+            if base_mode == "verified_only":
+                base_due = to_money(record.get("verified_due", 0.0))
+                if base_due <= 0.0:
                     self.send_json({
                         "success": False,
                         "error": "No Verified Balance",
-                        "message": "Verified balance is $0.00 (already settled or under dispute hold)."
+                        "message": "Verified balance is $0.00 (already settled or under inquiry hold)."
                     }, status=400)
                     return
-            elif mode == "family_split":
+            else:
+                base_due = rem_due
+
+            # Server-enforced amount authority based on payment mode & split percentage:
+            if mode == "family_split":
                 req_pct = body.get("split_percent")
                 if req_pct is None and isinstance(cg_meta, dict):
                     req_pct = cg_meta.get("split_percent")
@@ -1276,7 +1302,7 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
                     try:
                         pct_int = int(req_pct)
                         if pct_int in (25, 50, 75, 100):
-                            split_val = to_money(max(1.00, min(rem_due, rem_due * (pct_int / 100.0))))
+                            split_val = to_money(max(1.00, min(base_due, base_due * (pct_int / 100.0))))
                     except (ValueError, TypeError):
                         pass
                 if split_val is None:
@@ -1284,16 +1310,16 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
                         split_val = float(body.get("split_amount", 0.0))
                     except (ValueError, TypeError):
                         split_val = 0.0
-                if split_val < 1.00 or split_val > rem_due + 0.01:
+                if split_val < 1.00 or split_val > base_due + 0.01:
                     self.send_json({
                         "success": False,
                         "error": "Invalid Contribution Amount",
-                        "message": f"Family split contribution must be between $1.00 and remaining balance of ${rem_due:.2f}."
+                        "message": f"Family split contribution must be between $1.00 and applicable balance of ${base_due:.2f}."
                     }, status=400)
                     return
-                amount = to_money(min(rem_due, split_val))
+                amount = to_money(min(base_due, split_val))
             else:
-                amount = to_money(rem_due)
+                amount = to_money(base_due)
 
             # Active pending order idempotency guard to prevent concurrent double-order creation
             active_order = ACTIVE_INVOICE_ORDERS.get(invoice_id)
@@ -1301,6 +1327,7 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_json({
                     "success": True,
                     "order_id": active_order.get("order_id"),
+                    "reference_id": display_id,
                     "status": "CREATED",
                     "authorized_amount": active_order.get("amount"),
                     "payment_mode": active_order.get("mode"),
@@ -1309,7 +1336,7 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
                 })
                 return
 
-        result = create_paypal_order(amount, currency, invoice_id, payment_mode=mode)
+        result = create_paypal_order(amount, currency, invoice_id, payment_mode=mode, display_id=display_id)
         if result.get("success") and result.get("order_id"):
             with LEDGER_LOCK:
                 ACTIVE_INVOICE_ORDERS[invoice_id] = {
@@ -1347,10 +1374,15 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
             split_percent = 100
 
         with LEDGER_LOCK:
+            # Block caregiver tokens from creating secondary links or resolving raw invoice_id
+            if raw_id in CAREGIVER_TOKENS or raw_id.startswith("CG-"):
+                self.send_json({
+                    "success": False,
+                    "error": "Forbidden Operation",
+                    "message": "Caregiver share tokens cannot generate secondary links or resolve underlying patient invoice identifiers."
+                }, status=403)
+                return
             invoice_id = raw_id
-            if raw_id in CAREGIVER_TOKENS:
-                t_meta = CAREGIVER_TOKENS[raw_id]
-                invoice_id = t_meta["invoice_id"] if isinstance(t_meta, dict) else t_meta
 
             if not invoice_id or invoice_id not in INVOICE_STORE:
                 self.send_json({
