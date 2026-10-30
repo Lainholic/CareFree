@@ -65,8 +65,8 @@ sequenceDiagram
     Patient->>Edge: Upload Hospital Statement / Rx
     Edge->>Edge: Mask Direct Identifiers (Name, MRN) on Canvas
     Edge->>AI: Send Masked Image & Quantized Amounts
-    AI->>AI: Extract CPT/NDC + Match 2026 CMS Reference Rates
-    AI-->>Patient: Display Itemized Breakdown + Reference Rates + Inquiry Draft
+    AI->>AI: Extract CPT/NDC + Compare Illustrative CMS Reference Values
+    AI-->>Patient: Display Itemized Breakdown + Reference Values + Inquiry Draft
     
     alt Patient Self-Checkout via PayPal
         Patient->>PayPal: Launch Smart Button (Pay in 4 / PayPal / Card)
@@ -85,9 +85,9 @@ sequenceDiagram
 
 ## 🚀 Key Features Demonstrated in the Prototype
 
-### 1. Vision AI Medical Bill Deconstruction & CMS Benchmarks
+### 1. Vision AI Medical Bill Deconstruction & Illustrative Reference Values
 - **Multimodal Bill Parsing**: Deconstructs tabular statements into procedure codes (CPT), drug codes (NDC), descriptions, and billed charges.
-- **2026 CMS Medicare Reference Comparison**: Compares charges against national CMS Medicare allowable reference benchmarks (e.g., CPT 96372 billed at $90.00 vs $24.80 CMS reference rate) to highlight items worthy of review.
+- **Illustrative CMS-Style Reference Comparison**: Compares charges against illustrative CMS Medicare reference values (e.g., CPT 96372 billed at $90.00 vs $24.80 illustrative reference value) to highlight items worthy of review.
 - **Patient Inquiry Communication Draft**: Automatically generates draft inquiry letters referencing consumer protection concepts (such as 45 CFR § 149.410 No Surprises Act and hospital financial assistance policies) to help patients ask informed questions.
 - **IRS Pub 502 Educational Categorization**: Provides informational classification under IRC § 213(d) guidelines for HSA/FSA eligible health expenses.
 

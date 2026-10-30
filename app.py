@@ -142,7 +142,7 @@ def save_persisted_state():
 
 SAMPLE_DIR = os.path.join(BASE_DIR, "sample_receipts")
 
-# 2026 CMS National Medicare Physician & Outpatient Benchmark Allowable Schedule
+# Illustrative CMS-Style Reference Values for Prototype Comparison
 CMS_MEDICARE_BENCHMARKS = {
     # Emergency Department Services
     "CPT 99281": {"name": "Emergency Dept Visit (Level 1 Minor)", "cms_rate": 28.50, "category": "Emergency Room"},
@@ -303,7 +303,7 @@ SAMPLE_BILLS = {
                 "charge": 90.00,
                 "insured": 60.00,
                 "due": 30.00,
-                "flag": "Surprise Out-of-Network Flag (Dispute Eligible)",
+                "flag": "Surprise Out-of-Network Flag (Inquiry Draft Available)",
                 "cms_reference_fee": 24.80,
                 "markup_ratio": 3.63,
                 "hsa_status": "ELIGIBLE",
@@ -312,9 +312,9 @@ SAMPLE_BILLS = {
             }
         ],
         "ai_insights": [
-            "Smart Dispute & Partial Settle: CPT 96372 flagged under No Surprises Act ($30.00 hold). Verified services ($150.00) can be settled immediately.",
-            "CMS Medicare Benchmark Context: Itemized charges compared with 2026 Medicare National allowable fee schedule (e.g. CPT 96372 $24.80 benchmark vs $90.00 hospital charge).",
-            "HSA/FSA Tax Substantiation Ready: 100% of patient due ($180.00) pre-screened as IRC § 213(d) qualified medical expense for IRS Pub 502 reimbursement.",
+            "Smart Review & Partial Settle: CPT 96372 flagged for billing inquiry ($30.00 hold). Undisputed services ($150.00) can be tested in Sandbox checkout.",
+            "Illustrative CMS Reference Context: Itemized charges compared with illustrative Medicare-style reference values (e.g. CPT 96372 $24.80 reference value vs $90.00 billed charge).",
+            "HSA/FSA Educational Estimate: $180.00 pre-screened as potentially qualified medical care under IRC § 213(d) (subject to plan administrator review).",
             "PayPal Pay in 4 Option: Estimated $180.00 copay split into 4 bi-weekly payments of $45.00 (Final eligibility determined by PayPal at checkout).",
             "Privacy-Minimized Caregiver View: Family members can contribute toward copays via PayPal or Venmo with masked diagnostic details."
         ]
@@ -372,21 +372,24 @@ SAMPLE_BILLS = {
                 "markup_ratio": None,
                 "hsa_status": "POTENTIALLY_ELIGIBLE",
                 "hsa_category": "Over-the-Counter / Dietary Supplement",
-                "hsa_reason": "Potential eligibility under IRS Notice 2023-62: May require Letter of Medical Necessity (LMN) from physician."
+                "hsa_reason": "Potential eligibility under IRS Publication 502: May require Letter of Medical Necessity (LMN) from physician."
             }
         ],
         "ai_insights": [
-            "HSA/FSA Tax Substantiation Allocation: $30.00 pre-screened as direct Rx qualified expense; $10.00 OTC supplement requires LMN substantiation.",
-            "Co-Pay Verification: Prescription generic co-pays verified against standard Medicare Part D tier limits.",
+            "HSA/FSA Educational Estimate: $30.00 Rx pre-screened under IRC § 213(b); $10.00 OTC supplement may require a Letter of Medical Necessity (LMN) per plan rules.",
+            "Prescription Co-Pay Summary: Generic medication co-pays itemized for patient and caregiver review.",
             "PayPal Pay in 4 Option: Estimated $40.00 total split into 4 payments of $10.00 every two weeks (Final eligibility determined by PayPal at checkout).",
-            "IRS Pub 502 Ready: Printable tax substantiation slip generated upon PayPal checkout completion.",
-            "Auto-Reorder & Renewal: Caregiver notified of upcoming 90-day refill timeline."
+            "IRS Pub 502 Educational Record: Printable itemized expense summary available upon Sandbox checkout completion.",
+            "Collaborative Family Care Ledger: Share a tokenized caregiver link (25%, 50%, 75%, or 100%) for remote family contribution."
         ]
     }
 }
 
 ORDER_TO_INVOICE = {}
-PAYPAL_API_BASE = "https://api-m.sandbox.paypal.com" if PAYPAL_MODE == "sandbox" else "https://api-m.paypal.com"
+if PAYPAL_MODE.lower() != "sandbox":
+    print(f"[Security Notice] Non-sandbox PAYPAL_MODE='{PAYPAL_MODE}' rejected; enforcing 'sandbox' for prototype safety.")
+    PAYPAL_MODE = "sandbox"
+PAYPAL_API_BASE = "https://api-m.sandbox.paypal.com"
 _cached_paypal_token = {"token": None, "expires_at": 0}
 
 
@@ -455,16 +458,23 @@ def create_paypal_order(amount, currency="USD", invoice_id="", payment_mode="ful
             with urllib.request.urlopen(req, timeout=12) as resp:
                 res_data = json.loads(resp.read().decode())
                 order_id = res_data.get("id")
-                if order_id:
-                    with LEDGER_LOCK:
-                        ORDER_TO_INVOICE[order_id] = {
-                            "invoice_id": invoice_id,
-                            "amount": amount,
-                            "currency": currency,
-                            "payment_mode": payment_mode,
-                            "created_at": time.strftime("%Y-%m-%d %H:%M:%S")
-                        }
-                        save_persisted_state()
+                if not order_id:
+                    return {
+                        "success": False,
+                        "error": "MISSING_ORDER_ID",
+                        "mode": "live_paypal_sandbox_failed",
+                        "message": "PayPal Sandbox response did not include a valid order ID."
+                    }
+                with LEDGER_LOCK:
+                    ORDER_TO_INVOICE[order_id] = {
+                        "invoice_id": invoice_id,
+                        "amount": amount,
+                        "currency": currency,
+                        "payment_mode": payment_mode,
+                        "captured_already": False,
+                        "created_at": time.strftime("%Y-%m-%d %H:%M:%S")
+                    }
+                    save_persisted_state()
                 return {
                     "success": True,
                     "order_id": order_id,
@@ -478,9 +488,9 @@ def create_paypal_order(amount, currency="USD", invoice_id="", payment_mode="ful
             print(f"[PayPal Create Order Error] {e}")
             return {
                 "success": False,
-                "error": str(e),
+                "error": "ORDER_CREATE_FAILED",
                 "mode": "live_paypal_sandbox_failed",
-                "message": f"PayPal live sandbox order creation failed: {e}"
+                "message": "PayPal Sandbox order creation encountered a gateway error."
             }
 
     return {
@@ -491,6 +501,28 @@ def create_paypal_order(amount, currency="USD", invoice_id="", payment_mode="ful
 
 
 def capture_paypal_order(order_id):
+    # Pre-capture local ledger validation before calling external PayPal gateway
+    with LEDGER_LOCK:
+        pre_meta = ORDER_TO_INVOICE.get(order_id)
+        if pre_meta:
+            if pre_meta.get("captured_already"):
+                return {
+                    "success": False,
+                    "order_id": order_id,
+                    "status": "REPLAY_BLOCKED",
+                    "error": f"Order {order_id} has already been captured in local ledger."
+                }
+            pre_inv_id = pre_meta.get("invoice_id")
+            if pre_inv_id and pre_inv_id in INVOICE_STORE:
+                pre_inv = INVOICE_STORE[pre_inv_id]
+                if pre_inv.get("status") in ("PAID_IN_FULL", "SETTLED_FULL") and float(pre_inv.get("remaining_patient_due", 0.0)) <= 0.01:
+                    return {
+                        "success": False,
+                        "order_id": order_id,
+                        "status": "ALREADY_SETTLED",
+                        "error": f"Invoice {pre_inv_id} is already settled in full. Pre-capture guard blocked duplicate gateway call."
+                    }
+
     token = get_paypal_token()
     if token:
         try:
@@ -561,6 +593,15 @@ def capture_paypal_order(order_id):
                     order_meta = ORDER_TO_INVOICE.get(order_id, {})
                     invoice_id = order_meta.get("invoice_id")
                     payment_mode = order_meta.get("payment_mode", "full")
+                    expected_amt = to_money(order_meta.get("amount", captured_amount))
+                    if order_meta.get("amount") is not None and abs(to_money(captured_amount) - expected_amt) > 0.01:
+                        return {
+                            "success": False,
+                            "order_id": order_id,
+                            "status": "AMOUNT_MISMATCH",
+                            "error": f"Captured amount ${captured_amount:.2f} does not match authorized order amount ${expected_amt:.2f}"
+                        }
+                    order_meta["captured_already"] = True
                     settlement_status = "SETTLED_FULL"
 
                     if invoice_id and invoice_id in INVOICE_STORE:
@@ -648,9 +689,9 @@ def capture_paypal_order(order_id):
             print(f"[PayPal Capture Order Error] {e}")
             return {
                 "success": False,
-                "error": str(e),
+                "error": "ORDER_CAPTURE_FAILED",
                 "mode": "live_paypal_sandbox_failed",
-                "message": f"PayPal live sandbox order capture failed: {e}"
+                "message": "PayPal Sandbox order capture encountered a gateway error."
             }
 
     return {
@@ -1044,10 +1085,10 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
                         "items": items,
                         "ai_insights": [
                             f"Live Vision Transcription: {len(lines)} line items parsed via NVIDIA Nemotron-3.5-Super-VL.",
-                            f"Smart Dispute & Partial Settle: Disputed out-of-network balance: ${disputed_due:.2f}, Verified balance: ${verified_due:.2f}.",
-                            f"HSA/FSA Tax Substantiation: ${hsa_el:.2f} pre-screened as qualified medical expenses under IRC § 213(d).",
+                            f"Smart Review & Partial Settle: Flagged balance for inquiry: ${disputed_due:.2f}, Undisputed balance: ${verified_due:.2f}.",
+                            f"HSA/FSA Educational Estimate: ${hsa_el:.2f} pre-screened as potentially qualified medical expenses under IRC § 213(d).",
                             f"Pay in 4 Status: {'Eligible ($30-$1,500 range) - 4 bi-weekly payments of $' + str(installment) if pay_in_4_eligible else 'Single payment only (under $30 threshold)'}.",
-                            "CMS Medicare Benchmark Context: Itemized charges audited against 2026 CMS national physician fee schedule."
+                            "Illustrative CMS Reference Context: Itemized charges compared against illustrative CMS-style reference values."
                         ]
                     }
                     with LEDGER_LOCK:
