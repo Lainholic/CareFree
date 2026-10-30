@@ -93,13 +93,13 @@ sequenceDiagram
 
 ### 2. PayPal Sandbox Checkout & Pay in 4 Illustration
 - **Pay in 4 Installment Illustration**: Dynamically calculates and displays an estimated 4-payment bi-weekly schedule for qualifying balances between $30.00 and $1,500.00 (e.g., $180.00 balance displayed as 4 payments of $45.00).
-- **Official PayPal Smart Payment Buttons**: Direct integration with PayPal JS SDK (`locale=en_US`) supporting the Orders v2 lifecycle (`createOrder` and `onApprove` capture).
+- **Official PayPal Smart Payment Buttons**: Direct integration with PayPal JS SDK (`locale=en_US`, `enable-funding=paylater,venmo`) supporting the Orders v2 lifecycle (`createOrder` and `onApprove` capture) across PayPal, Pay Later, and Venmo Sandbox.
 - **Transparent Consumer Notice**: Clearly advises patients: *"Estimated installment illustration. Eligibility, funding sources, and final terms are determined by PayPal at checkout."*
 
 ### 3. Family Caregiver Payment Portal (Privacy-Minimized)
 - **Opaque Tokenized Share Links**: Generates unique, non-guessable tokens (`CG-XXXX`) allowing family members to view and contribute to a designated bill.
-- **Privacy-Conscious Presentation**: Hides personal patient names (masked to `Protected Patient`) and presents high-level clinical item codes to minimize sensitive disclosure.
-- **Flexible Cost-Sharing Calculator**: Allows patients to set 25%, 50%, 75%, or 100% contribution requests, updating the local demo balance as payments are simulated or captured.
+- **Privacy-Conscious Presentation**: Hides personal patient names (masked to `Protected Patient (Privacy-Minimized View)`) and presents masked clinical item codes (`PRIV-MASK-01`) to minimize sensitive disclosure.
+- **Collaborative Family Care Ledger**: Allows patients to set 25%, 50%, 75%, or 100% contribution requests, tracking cumulative family contributions and remaining demo balances in real time as partial payments are captured.
 
 ---
 
@@ -157,9 +157,9 @@ Open your browser at `http://127.0.0.1:8050`.
 2. **Review Bill Breakdown & CMS Benchmark**: Inspect the deconstructed CPT codes in the itemized table. Notice **CPT 96372 (Therapeutic Injection)** highlighted alongside the **$24.80 CMS Medicare benchmark rate**.
 3. **Inspect Inquiry Letter**: Click **"📄 Generate Dispute Letter"** to view a patient inquiry letter citing **45 CFR § 149.410 (No Surprises Act)** and hospital financial assistance questions.
 4. **Test PayPal Pay in 4 Illustration**: Review the payment card on the right displaying 4 bi-weekly payments of **$45.00** with clear consumer disclaimers.
-5. **Adjust Caregiver Split**: Click **"50% Half"** ($90.00) under the Family Split section to see real-time balance partitioning.
-6. **Generate Privacy-Preserving Link**: Click **"🔗 Generate Privacy-Shielded Link"** and open the generated link in a new tab to verify the **Caregiver View** (patient name displayed as `Protected Patient` and line items shown with clinical privacy codes).
-7. **PayPal Sandbox Settlement**: The official PayPal Smart Buttons render in pure English (`locale=en_US`) with options for PayPal, Pay Later, and Debit/Credit Card.
+5. **Adjust Caregiver Split**: Click **"75% Share"** ($135.00) or **"50% Half"** ($90.00) under the Family Split section to see real-time balance partitioning on the **Family Care Ledger**.
+6. **Generate Privacy-Minimized Link**: Click **"🔗 Generate Privacy-Minimized Link"** and open the generated link in a new tab to verify the **Caregiver View** (patient name displayed as `Protected Patient (Privacy-Minimized View)` and line items shown with masked clinical codes `PRIV-MASK-01`).
+7. **PayPal Sandbox Settlement**: The official PayPal Smart Buttons render in pure English (`locale=en_US`) with options for PayPal, Pay Later, Venmo (where eligible), and Debit/Credit Card.
 
 ---
 

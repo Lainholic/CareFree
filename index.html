@@ -1261,8 +1261,8 @@
       border-color: rgba(255, 255, 255, 0.3);
     }
   </style>
-  <!-- PayPal JS SDK (Official Sandbox Integration with Pay in 4) -->
-  <script src="https://www.paypal.com/sdk/js?client-id=AS1428RrnP5XYHTUHnJ6AbEgYFTLTFXtQ9f8f9q5dQbpoWMbJ5-zT7JaVnYZ9Qt0paRWB208ClXeCwhq&currency=USD&components=buttons,messages&enable-funding=paylater&locale=en_US"></script>
+  <!-- PayPal JS SDK (Official Sandbox Integration with Pay in 4 & Venmo) -->
+  <script src="https://www.paypal.com/sdk/js?client-id=AS1428RrnP5XYHTUHnJ6AbEgYFTLTFXtQ9f8f9q5dQbpoWMbJ5-zT7JaVnYZ9Qt0paRWB208ClXeCwhq&currency=USD&components=buttons,messages&enable-funding=paylater,venmo&locale=en_US"></script>
 </head>
 <body>
   <div class="ambient-bg"></div>
@@ -1400,11 +1400,11 @@
             </div>
           </div>
 
-          <!-- HIPAA Privacy Shield Indicator (Active in Caregiver Mode) -->
+          <!-- Privacy-Minimized Shield Indicator (Active in Caregiver Mode) -->
           <div class="hipaa-shield-banner" id="hipaaBanner" style="display: none;">
             <span style="font-size: 16px;">🛡️</span>
             <div>
-              <strong>HIPAA Safe Harbor Privacy Shield Active</strong>: Clinical diagnoses, prescription NDC codes, and doctor notes are masked for caregiver contribution privacy.
+              <strong>Privacy-Minimized Caregiver Shield Active</strong>: Direct patient identifiers, clinical diagnoses, and prescription NDC codes are masked in this prototype view for family contribution.
             </div>
           </div>
 
@@ -1554,22 +1554,27 @@
               <span style="font-size: 18px;">💳</span> Authorize via PayPal Smart Buttons
             </button>
             <div class="sandbox-tag">
-              <span>🔒 Official PayPal JS SDK v2</span> • <span>Live Sandbox Authority</span>
+              <span>🔒 Official PayPal JS SDK v2</span> • <span>PayPal / Pay Later / Venmo Sandbox</span>
             </div>
           </div>
 
           <!-- Family Caregiver Card -->
           <div class="caregiver-card" id="caregiverShareCard">
             <h4>👨‍👩‍👧 Family Split & Caregiver Link</h4>
-            <p>Send a privacy-shielded payment request to family members (HIPAA Safe Harbor certified).</p>
+            <p>Send a privacy-minimized payment link so family members can review and contribute via PayPal or Venmo Sandbox.</p>
+            <div id="familyLedgerBar" style="background: rgba(15, 23, 42, 0.65); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; font-size: 11px; display: flex; justify-content: space-between; align-items: center;">
+              <span style="color: #94a3b8;">Family Care Ledger:</span>
+              <span>Contributed <strong id="dispFamContributed" style="color: #34d399;">$0.00</strong> • Remaining <strong id="dispFamRemaining" style="color: #38bdf8;">$180.00</strong></span>
+            </div>
             <div class="split-amount-presets" id="splitPresetsRow">
               <span class="split-preset-chip active" id="chipSplit100" onclick="setCaregiverSplit('100')">100% Full</span>
+              <span class="split-preset-chip" id="chipSplit75" onclick="setCaregiverSplit('75')">75% Share</span>
               <span class="split-preset-chip" id="chipSplit50" onclick="setCaregiverSplit('50')">50% Half</span>
               <span class="split-preset-chip" id="chipSplit25" onclick="setCaregiverSplit('25')">25% Share</span>
             </div>
             <input type="email" class="caregiver-input" id="caregiverEmail" placeholder="family.caregiver@gmail.com">
             <button class="caregiver-btn" onclick="sendCaregiverLink()">
-              🔗 Generate Privacy-Shielded Link
+              🔗 Generate Privacy-Minimized Link
             </button>
           </div>
         </div>
@@ -2027,6 +2032,14 @@
       const dispAmtSpan = document.getElementById('settleDisputedAmt');
       if (dispAmtSpan) dispAmtSpan.textContent = '$' + disputedDue.toFixed(2);
 
+      // Update Collaborative Family Care Ledger Bar
+      const remPatientDue = Number(data.remaining_patient_due !== undefined ? data.remaining_patient_due : dueNum);
+      const famContributed = Number(data.family_contributions_total !== undefined ? data.family_contributions_total : (data.total_captured_amount || 0));
+      const famContribEl = document.getElementById('dispFamContributed');
+      const famRemEl = document.getElementById('dispFamRemaining');
+      if (famContribEl) famContribEl.textContent = '$' + famContributed.toFixed(2);
+      if (famRemEl) famRemEl.textContent = '$' + remPatientDue.toFixed(2);
+
       // Safe DOM construction: items table (Zero innerHTML, eliminates XSS)
       const tbody = document.getElementById('itemsTableBody');
       tbody.textContent = '';
@@ -2199,7 +2212,7 @@
         } else {
           fallbackCopyText(data.share_url);
         }
-        alert(`🛡️ Family Caregiver Payment Link Generated!\n\nSent to: ${email}\nDecoupled Safe Harbor URL: ${data.share_url}\n\n(HIPAA Privacy Shield active • Copied to clipboard!)`);
+        alert(`🛡️ Family Caregiver Payment Link Generated!\n\nSent to: ${email}\nPrivacy-Minimized Token URL: ${data.share_url}\n\n(Client-side privacy masking active • Copied to clipboard!)`);
       })
       .catch(err => {
         alert("Notice: " + err.message);

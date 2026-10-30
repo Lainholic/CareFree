@@ -316,7 +316,7 @@ SAMPLE_BILLS = {
             "CMS Medicare Benchmark Context: Itemized charges compared with 2026 Medicare National allowable fee schedule (e.g. CPT 96372 $24.80 benchmark vs $90.00 hospital charge).",
             "HSA/FSA Tax Substantiation Ready: 100% of patient due ($180.00) pre-screened as IRC § 213(d) qualified medical expense for IRS Pub 502 reimbursement.",
             "PayPal Pay in 4 Option: Estimated $180.00 copay split into 4 bi-weekly payments of $45.00 (Final eligibility determined by PayPal at checkout).",
-            "HIPAA Caregiver View: Family members can contribute toward copays with privacy-preserving diagnostic shielding."
+            "Privacy-Minimized Caregiver View: Family members can contribute toward copays via PayPal or Venmo with masked diagnostic details."
         ]
     },
     "pharmacy_receipt_1.jpg": {
@@ -736,47 +736,55 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
                     self.send_json({"success": False, "error": "Invoice no longer exists"}, status=404)
                     return
                 raw_inv = INVOICE_STORE[inv_id]
-                # Strict HIPAA Safe Harbor (45 CFR § 164.514) Allowlist-Only Projection:
-                # 1. Year-only service date (month/day strictly redacted)
+                # Client-Side & Tokenized Privacy-Minimized Projection for Family Caregivers:
+                # 1. Year-only service date (month/day masked in caregiver view)
                 raw_date = str(raw_inv.get("date", "2026"))
-                year_only = raw_date[:4] + "-XX-XX (HIPAA Safe Harbor Redacted)"
+                year_only = raw_date[:4] + "-XX-XX (Privacy-Minimized View)"
                 
-                # 2. Fully de-identified clinical items (no CPT, NDC, or medical condition codes)
+                # 2. Masked clinical items (direct CPT/NDC diagnostic details hidden from caregiver view)
                 safe_items = []
                 for idx, it in enumerate(raw_inv.get("items", [])):
                     safe_items.append({
-                        "code": f"HIPAA-SAFE-0{idx+1}",
-                        "desc": "Redacted Healthcare Clinical Service (Safe Harbor Compliant)",
+                        "code": f"PRIV-MASK-0{idx+1}",
+                        "desc": "Masked Healthcare Clinical Service (Caregiver View)",
                         "charge": it.get("charge", 0.0),
                         "insured": it.get("insured", 0.0),
                         "due": it.get("due", 0.0),
                         "flag": "Caregiver Contribution View"
                     })
                 
-                rem_due = raw_inv.get("remaining_patient_due", raw_inv.get("patient_due", 0.0))
+                orig_due = float(raw_inv.get("patient_due", 0.0))
+                rem_due = float(raw_inv.get("remaining_patient_due", orig_due))
+                fam_contrib = float(raw_inv.get("family_contributions_total", raw_inv.get("total_captured_amount", 0.0)))
+                contrib_cnt = len(raw_inv.get("captures", []))
+                eff_req = to_money(min(rem_due, req_amt)) if req_amt > 0.0 else rem_due
                 safe_inv = {
                     "invoice_id": inv_id,
                     "caregiver_token": cg_token,
-                    "facility": "Verified Healthcare Facility (HIPAA Redacted)",
+                    "facility": "Verified Healthcare Facility (Privacy-Minimized)",
                     "date": year_only,
                     "currency": raw_inv.get("currency", "USD"),
-                    "patient_name": "Protected Patient (HIPAA Safe Harbor)",
+                    "patient_name": "Protected Patient (Privacy-Minimized View)",
                     "total_amount": raw_inv.get("total_amount", 0.0),
                     "insurance_covered": raw_inv.get("insurance_covered", 0.0),
+                    "original_patient_due": orig_due,
                     "patient_due": rem_due,
                     "verified_due": raw_inv.get("verified_due", 0.0),
                     "disputed_due": 0.0,  # Shield raw clinical disputes from caregiver
                     "remaining_patient_due": rem_due,
+                    "family_contributions_total": fam_contrib,
+                    "contributions_count": contrib_cnt,
                     "requested_split_percent": split_pct,
-                    "requested_amount": req_amt if req_amt > 0.0 else rem_due,
+                    "requested_amount": eff_req,
                     "pay_in_4_eligible": raw_inv.get("pay_in_4_eligible", False),
                     "pay_in_4_installment": raw_inv.get("pay_in_4_installment", 0.0),
                     "status": raw_inv.get("status", "UNPAID"),
                     "hipaa_privacy_mode": True,
+                    "privacy_minimized_mode": True,
                     "items": safe_items,
                     "ai_insights": [
-                        "🛡️ HIPAA Safe Harbor Active: Patient name, clinical diagnoses, and service dates (month/day) strictly de-identified.",
-                        f"Family Care Contribution: Requested share of {split_pct}% (${req_amt:.2f}) ready for secure PayPal settlement."
+                        "🛡️ Privacy-Minimized Caregiver Shield Active: Patient name, clinical diagnoses, and service dates (month/day) masked for family review.",
+                        f"Collaborative Family Care Ledger: Requested share of {split_pct}% (${eff_req:.2f}) ready for PayPal / Pay Later / Venmo Sandbox checkout (Remaining demo balance: ${rem_due:.2f})."
                     ]
                 }
             self.send_json({"success": True, "invoice": safe_inv, "privacy_mode": True})
@@ -791,15 +799,15 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
                 if inv_id in INVOICE_STORE:
                     raw_inv = INVOICE_STORE[inv_id]
                     if is_caregiver_mode:
-                        # Privacy-Preserving HIPAA Safe Harbor Masking for Family / Caregivers
+                        # Privacy-Minimized Masking for Family / Caregivers
                         p_name = raw_inv.get("patient_name", "Patient")
                         masked_name = p_name[0] + "****** " + (p_name.split()[-1][0] + "****" if len(p_name.split()) > 1 else "")
                         
                         masked_items = []
                         for idx, it in enumerate(raw_inv.get("items", [])):
                             masked_items.append({
-                                "code": f"HIPAA-PROT-0{idx+1}",
-                                "desc": "Protected Healthcare Clinical Service (Caregiver View)",
+                                "code": f"PRIV-MASK-0{idx+1}",
+                                "desc": "Masked Healthcare Clinical Service (Caregiver View)",
                                 "charge": it.get("charge", 0.0),
                                 "insured": it.get("insured", 0.0),
                                 "due": it.get("due", 0.0),
@@ -810,9 +818,10 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
                         caregiver_inv["patient_name"] = masked_name
                         caregiver_inv["items"] = masked_items
                         caregiver_inv["hipaa_privacy_mode"] = True
+                        caregiver_inv["privacy_minimized_mode"] = True
                         caregiver_inv["ai_insights"] = [
-                            "🛡️ HIPAA Privacy Shield Active: Clinical diagnoses & drug identifiers masked for caregiver contribution.",
-                            "Direct PayPal Settlement: Family members can contribute to the copay safely without viewing private diagnostic records."
+                            "🛡️ Privacy-Minimized Caregiver Shield Active: Clinical diagnoses & drug identifiers masked for caregiver contribution.",
+                            "Collaborative Family Checkout: Family members can contribute to the copay via PayPal, Pay Later, or Venmo Sandbox without viewing full diagnostic details."
                         ]
                         self.send_json({"success": True, "invoice": caregiver_inv, "privacy_mode": True})
                     else:
@@ -1161,7 +1170,7 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
         caregiver_email = str(body.get("caregiver_email", "")).strip() or "family@example.com"
         try:
             split_percent = int(body.get("split_percent", 100))
-            if split_percent not in (25, 50, 100):
+            if split_percent not in (25, 50, 75, 100):
                 split_percent = 100
         except (ValueError, TypeError):
             split_percent = 100
@@ -1176,7 +1185,7 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
                 return
 
             record = INVOICE_STORE[invoice_id]
-            # Cryptographically isolated caregiver bearer token (HIPAA Safe Harbor)
+            # Opaque tokenized caregiver bearer link (Privacy-Minimized View)
             cg_token = f"CG-{secrets.token_urlsafe(16)}"
             rem_due = to_money(record.get("remaining_patient_due", record.get("patient_due", 0.0)))
             req_amount = to_money(max(1.00, rem_due * (split_percent / 100.0))) if rem_due > 0 else 0.0
@@ -1198,14 +1207,17 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
                 "caregiver_email": caregiver_email,
                 "split_percent": split_percent,
                 "requested_amount": req_amount,
-                "patient_name_masked": "Protected Patient (HIPAA Safe Harbor)",
+                "patient_name_masked": "Protected Patient (Privacy-Minimized View)",
                 "patient_due": float(record.get("patient_due", 0.0)),
                 "remaining_patient_due": rem_due,
+                "family_contributions_total": float(record.get("family_contributions_total", record.get("total_captured_amount", 0.0))),
+                "contributions_count": len(record.get("captures", [])),
                 "verified_due": float(record.get("verified_due", record.get("patient_due", 0.0))),
                 "pay_in_4_eligible": bool(record.get("pay_in_4_eligible", False)),
                 "pay_in_4_installment": float(record.get("pay_in_4_installment", 0.0)),
                 "hipaa_safe_harbor": True,
-                "message": f"Caregiver privacy-preserving payment link generated ({split_percent}% contribution: ${req_amount:.2f})."
+                "privacy_minimized_mode": True,
+                "message": f"Caregiver privacy-minimized payment link generated ({split_percent}% contribution: ${req_amount:.2f})."
             })
 
     def handle_appeal_generate(self, body):
@@ -1236,11 +1248,11 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
         date_of_service = record.get("date", time.strftime("%Y-%m-%d"))
         today_str = time.strftime("%B %d, %Y")
 
-        # Shield protected identity if requested in HIPAA Safe Harbor caregiver mode
+        # Shield protected identity if requested in privacy-minimized caregiver mode
         if bool(body.get("is_caregiver") or body.get("hipaa_privacy_mode") or record.get("hipaa_privacy_mode")):
-            patient_name = "Protected Patient (HIPAA Safe Harbor)"
-            facility = "Verified Healthcare Facility (HIPAA Safe Harbor)"
-            date_of_service = str(date_of_service)[:4] + "-XX-XX (HIPAA Safe Harbor Redacted)"
+            patient_name = "Protected Patient (Privacy-Minimized View)"
+            facility = "Verified Healthcare Facility (Privacy-Minimized)"
+            date_of_service = str(date_of_service)[:4] + "-XX-XX (Privacy-Minimized View)"
         
         items = record.get("items", [])
         
