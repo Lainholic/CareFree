@@ -1321,9 +1321,15 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
             else:
                 amount = to_money(base_due)
 
-            # Active pending order idempotency guard to prevent concurrent double-order creation
+            # Active pending order idempotency guard bound to the same privacy context (display_id)
             active_order = ACTIVE_INVOICE_ORDERS.get(invoice_id)
-            if active_order and active_order.get("mode") == mode and abs(active_order.get("amount", 0.0) - amount) < 0.01 and (time.time() - active_order.get("created_time", 0)) < 60:
+            if (
+                active_order
+                and active_order.get("display_id") == display_id
+                and active_order.get("mode") == mode
+                and abs(active_order.get("amount", 0.0) - amount) < 0.01
+                and (time.time() - active_order.get("created_time", 0)) < 60
+            ):
                 self.send_json({
                     "success": True,
                     "order_id": active_order.get("order_id"),
@@ -1332,7 +1338,7 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
                     "authorized_amount": active_order.get("amount"),
                     "payment_mode": active_order.get("mode"),
                     "mode": "existing_active_order",
-                    "message": "Reusing existing active checkout order to prevent double-order creation"
+                    "message": "Reusing existing active checkout order within the same privacy context"
                 })
                 return
 
@@ -1341,6 +1347,7 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
             with LEDGER_LOCK:
                 ACTIVE_INVOICE_ORDERS[invoice_id] = {
                     "order_id": result["order_id"],
+                    "display_id": display_id,
                     "amount": amount,
                     "mode": mode,
                     "created_time": time.time()

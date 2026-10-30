@@ -2389,7 +2389,7 @@
       const modal = document.getElementById('hsaModal');
       const contentEl = document.getElementById('hsaSlipContent');
       modal.style.display = 'flex';
-      contentEl.textContent = "Loading IRS Publication 502 Evidence Record from secure ledger...";
+      contentEl.textContent = "Loading educational IRS Publication 502 expense summary from local demonstration ledger...";
 
       const targetId = currentInvoice.caregiver_token || currentInvoice.invoice_id || 'sample';
       fetch('/api/hsa-evidence/' + encodeURIComponent(targetId))
@@ -2399,12 +2399,12 @@
             const ev = res.evidence;
             let slip = "";
             slip += "========================================================================================\n";
-            slip += "             HSA / FSA HEALTHCARE EXPENSE PAYMENT EVIDENCE RECORD\n";
-            slip += "   Prepared for Account Reimbursement & Personal Tax Substantiation (IRC § 213(d))\n";
+            slip += "             HSA / FSA EDUCATIONAL HEALTHCARE EXPENSE SUMMARY\n";
+            slip += "   Educational Healthcare Expense Summary — Not Reimbursement Approval (IRC § 213(d) Guide)\n";
             slip += "========================================================================================\n\n";
-            slip += `EVIDENCE RECORD ID  : ${ev.evidence_id}\n`;
+            slip += `SUMMARY RECORD ID   : ${ev.evidence_id}\n`;
             slip += `RECORD ISSUE DATE   : ${ev.issue_timestamp}\n`;
-            slip += `RULES STANDARD      : ${ev.statutory_reference} [${ev.rules_version}]\n\n`;
+            slip += `REFERENCE GUIDE     : ${ev.statutory_reference} [${ev.rules_version}]\n\n`;
             slip += `[HEALTHCARE PROVIDER & PATIENT INFORMATION]\n`;
             slip += `Provider / Pharmacy : ${ev.facility}\n`;
             slip += `Date of Service     : ${ev.service_date}\n`;
@@ -2433,13 +2433,13 @@
             });
 
             slip += "----------------------------------------------------------------------------------------\n\n";
-            slip += `[STATUTORY COMPLIANCE & LEGAL NOTICE]\n`;
+            slip += `[EDUCATIONAL SCOPE & LIMITATIONS]\n`;
             slip += `${ev.legal_notice}\n`;
             slip += "========================================================================================\n";
 
             contentEl.textContent = slip;
           } else {
-            contentEl.textContent = "Notice: Unable to retrieve evidence record (" + (res.error || "Invoice not found") + ")";
+            contentEl.textContent = "Notice: Unable to retrieve expense summary (" + (res.error || "Invoice not found") + ")";
           }
         })
         .catch(err => {
@@ -2478,7 +2478,7 @@
         alert("Please allow popups to print or save the slip as PDF.");
         return;
       }
-      printWindow.document.write('<!DOCTYPE html><html><head><title>HSA FSA Payment Evidence Slip</title>');
+      printWindow.document.write('<!DOCTYPE html><html><head><title>HSA/FSA Educational Expense Summary</title>');
       printWindow.document.write('<style>body { font-family: "JetBrains Mono", monospace, serif; font-size: 9.5pt; line-height: 1.45; white-space: pre-wrap; padding: 30px; color: #000; }</style></head><body>');
       printWindow.document.write(text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'));
       printWindow.document.write('</body></html>');
