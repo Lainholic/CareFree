@@ -17,8 +17,8 @@ import urllib.request
 import uuid
 from decimal import Decimal, ROUND_HALF_UP
 
-PORT = 8050
-HOST = "127.0.0.1"
+PORT = int(os.environ.get("PORT", 8050))
+HOST = os.environ.get("HOST", "0.0.0.0")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Concurrency & Mutex Locks for Authoritative Financial Ledger
@@ -45,15 +45,15 @@ if os.path.exists(ENV_PATH):
         with open(ENV_PATH, "r", encoding="utf-8") as ef:
             for line in ef:
                 line = line.strip()
-                if line.startswith("NEBIUS_API_KEY="):
+                if line.startswith("NEBIUS_API_KEY=") and not NEBIUS_API_KEY:
                     NEBIUS_API_KEY = line.split("=", 1)[1].strip().strip('"').strip("'")
-                elif line.startswith("NEBIUS_BASE_URL="):
+                elif line.startswith("NEBIUS_BASE_URL=") and not os.environ.get("NEBIUS_BASE_URL"):
                     NEBIUS_BASE_URL = line.split("=", 1)[1].strip().strip('"').strip("'")
-                elif line.startswith("PAYPAL_CLIENT_ID="):
+                elif line.startswith("PAYPAL_CLIENT_ID=") and not os.environ.get("PAYPAL_CLIENT_ID"):
                     PAYPAL_CLIENT_ID = line.split("=", 1)[1].strip().strip('"').strip("'")
-                elif line.startswith("PAYPAL_CLIENT_SECRET="):
+                elif line.startswith("PAYPAL_CLIENT_SECRET=") and not os.environ.get("PAYPAL_CLIENT_SECRET"):
                     PAYPAL_CLIENT_SECRET = line.split("=", 1)[1].strip().strip('"').strip("'")
-                elif line.startswith("PAYPAL_MODE="):
+                elif line.startswith("PAYPAL_MODE=") and not os.environ.get("PAYPAL_MODE"):
                     PAYPAL_MODE = line.split("=", 1)[1].strip().strip('"').strip("'")
     except Exception as e:
         print(f"[Notice] .env load exception: {e}")
@@ -768,10 +768,10 @@ def capture_paypal_order(order_id):
 class CarePayHandler(http.server.SimpleHTTPRequestHandler):
     def end_headers(self):
         origin = self.headers.get("Origin", "")
-        if origin and (origin.startswith("http://127.0.0.1") or origin.startswith("http://localhost")):
+        if origin:
             self.send_header("Access-Control-Allow-Origin", origin)
         else:
-            self.send_header("Access-Control-Allow-Origin", f"http://{HOST}:{PORT}")
+            self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
         self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
@@ -1412,7 +1412,9 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
                 "created_at": time.time()
             }
             save_persisted_state()
-            share_url = f"http://{HOST}:{PORT}/?cg_token={cg_token}"
+            host_header = self.headers.get("Host") or f"{HOST}:{PORT}"
+            proto = self.headers.get("X-Forwarded-Proto", "https" if "run.app" in host_header else "http")
+            share_url = f"{proto}://{host_header}/?cg_token={cg_token}"
 
             self.send_json({
                 "success": True,
@@ -1603,8 +1605,8 @@ def run_server():
         print(f"================================================================")
         print(f"  PainFree CarePay AI Server (PayPal AI Hackathon)")
         print(f"  Architecture: ThreadingHTTPServer (Concurrent Async)")
-        print(f"  Live Local URL: http://{HOST}:{PORT}")
-        print(f"  PayPal Sandbox: Enabled (Client-ID: {PAYPAL_CLIENT_ID})")
+        print(f"  Listening on: http://{HOST}:{PORT}")
+        print(f"  PayPal Mode: {PAYPAL_MODE}")
         print(f"================================================================")
         try:
             httpd.serve_forever()

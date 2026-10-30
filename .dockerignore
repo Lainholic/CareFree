@@ -1,0 +1,14 @@
+.git
+.github
+.gitignore
+.env*
+.secrets*
+setup-secrets*
+*.bak
+_reports/
+_work/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv
