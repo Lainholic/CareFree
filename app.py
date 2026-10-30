@@ -177,12 +177,12 @@ def classify_hsa_eligibility(code, desc, flag):
     desc_upper = str(desc).upper()
     flag_upper = str(flag).upper()
 
-    # Prescription Drugs (NDC) - Standard Eligible under IRC § 213(b)/(d)
+    # Prescription Drugs (NDC) - Educational IRC § 213(b)/(d) pre-screen
     if "NDC" in code_upper or any(rx in desc_upper for rx in ["ATORVASTATIN", "AMLODIPINE", "LIPITOR", "NORVASC", "METFORMIN", "LISINOPRIL"]):
         return (
             "ELIGIBLE",
             "Prescription Medication (Rx)",
-            "Qualified medical care expense under IRC § 213(b) (Valid clinician prescription)"
+            "Potentially eligible prescription medication expense under IRC § 213(b) (Subject to valid prescription and plan administrator review)"
         )
 
     # Inpatient / Outpatient Clinical Hospital Procedures (CPT/REV)
@@ -190,7 +190,7 @@ def classify_hsa_eligibility(code, desc, flag):
         return (
             "ELIGIBLE",
             "Clinical Diagnostic & Treatment",
-            "Qualified medical care expense under IRC § 213(d)(1)(A) (Diagnosis, cure, or treatment of disease)"
+            "Potentially eligible medical care expense under IRC § 213(d)(1)(A) (Subject to plan administrator review)"
         )
 
     # OTC / Supplements: Dietary supplements are not automatically eligible unless accompanied by Letter of Medical Necessity (LMN)
@@ -205,7 +205,7 @@ def classify_hsa_eligibility(code, desc, flag):
         return (
             "ELIGIBLE",
             "Pre-Screened Medical Care",
-            "Pre-screened qualified healthcare expense under IRC § 213(d)"
+            "Estimated eligible healthcare expense under IRC § 213(d) (Subject to plan administrator review)"
         )
 
     return (
@@ -524,12 +524,13 @@ def capture_paypal_order(order_id):
                 "error": f"Order {order_id} has already been captured in local ledger."
             }
         pre_inv_id = pre_meta.get("invoice_id")
+        pre_disp_id = pre_meta.get("display_id", pre_inv_id)
         if not pre_inv_id or pre_inv_id not in INVOICE_STORE:
             return {
                 "success": False,
                 "order_id": order_id,
                 "status": "INVOICE_NOT_FOUND",
-                "error": f"Associated invoice '{pre_inv_id}' not found in local ledger."
+                "error": f"Associated reference '{pre_disp_id}' not found in local ledger."
             }
         pre_inv = INVOICE_STORE[pre_inv_id]
         pre_rem_due = to_money(pre_inv.get("remaining_patient_due", pre_inv.get("patient_due", 0.0)))
@@ -538,7 +539,7 @@ def capture_paypal_order(order_id):
                 "success": False,
                 "order_id": order_id,
                 "status": "ALREADY_SETTLED",
-                "error": f"Invoice {pre_inv_id} is already settled in full. Pre-capture guard blocked duplicate gateway call."
+                "error": f"Reference {pre_disp_id} is already settled in full. Pre-capture guard blocked duplicate gateway call."
             }
         expected_pre_amt = to_money(pre_meta.get("amount", 0.0))
         if expected_pre_amt <= 0.0 or expected_pre_amt > pre_rem_due + 0.01:
@@ -546,14 +547,14 @@ def capture_paypal_order(order_id):
                 "success": False,
                 "order_id": order_id,
                 "status": "EXCEEDS_REMAINING_BALANCE",
-                "error": f"Order amount ${expected_pre_amt:.2f} exceeds remaining invoice balance ${pre_rem_due:.2f}. Capture blocked."
+                "error": f"Order amount ${expected_pre_amt:.2f} exceeds remaining balance ${pre_rem_due:.2f}. Capture blocked."
             }
         if pre_inv_id in IN_FLIGHT_INVOICES:
             return {
                 "success": False,
                 "order_id": order_id,
                 "status": "CAPTURE_IN_PROGRESS",
-                "error": f"Another capture is currently in flight for invoice {pre_inv_id}. Concurrent capture blocked."
+                "error": f"Another capture is currently in flight for reference {pre_disp_id}. Concurrent capture blocked."
             }
         IN_FLIGHT_INVOICES.add(pre_inv_id)
 
@@ -583,8 +584,7 @@ def capture_paypal_order(order_id):
                             "success": False,
                             "order_id": order_id,
                             "status": status or "FAILED",
-                            "error": "PayPal capture incomplete or rejected by gateway",
-                            "raw_capture": res_data
+                            "error": "PayPal capture incomplete or rejected by gateway"
                         }
 
                     cap = captures[0]
@@ -595,8 +595,7 @@ def capture_paypal_order(order_id):
                             "success": False,
                             "order_id": order_id,
                             "status": cap_status or "FAILED",
-                            "error": "Capture status not COMPLETED or missing capture ID",
-                            "raw_capture": res_data
+                            "error": "Capture status not COMPLETED or missing capture ID"
                         }
 
                     # Authoritative capture amount and currency straight from gateway
@@ -611,8 +610,7 @@ def capture_paypal_order(order_id):
                             "success": False,
                             "order_id": order_id,
                             "status": "FAILED",
-                            "error": "Invalid zero or negative capture amount from gateway",
-                            "raw_capture": res_data
+                            "error": "Invalid zero or negative capture amount from gateway"
                         }
 
                     # Update authoritative invoice ledger state with Mutex Lock
@@ -642,6 +640,7 @@ def capture_paypal_order(order_id):
                             }
 
                         invoice_id = order_meta.get("invoice_id")
+                        disp_id = order_meta.get("display_id", invoice_id)
                         payment_mode = order_meta.get("payment_mode", "full")
                         expected_amt = to_money(order_meta.get("amount", captured_amount))
                         if order_meta.get("amount") is not None and abs(to_money(captured_amount) - expected_amt) > 0.01:
@@ -657,7 +656,7 @@ def capture_paypal_order(order_id):
                                 "success": False,
                                 "order_id": order_id,
                                 "status": "INVOICE_NOT_FOUND",
-                                "error": f"Associated invoice '{invoice_id}' not found in local store."
+                                "error": f"Associated reference '{disp_id}' not found in local store."
                             }
 
                         inv = INVOICE_STORE[invoice_id]
@@ -679,7 +678,7 @@ def capture_paypal_order(order_id):
                                 "success": False,
                                 "order_id": order_id,
                                 "status": "ALREADY_SETTLED",
-                                "error": f"Invoice {invoice_id} is already settled in full. Duplicate capture blocked."
+                                "error": f"Reference {disp_id} is already settled in full. Duplicate capture blocked."
                             }
                         if to_money(captured_amount) > rem_now + 0.01:
                             return {
@@ -985,7 +984,8 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
                 patient_due = to_money(inv.get("patient_due", 0.0))
                 hsa_el = to_money(inv.get("hsa_eligible_due", patient_due))
                 hsa_rev = to_money(inv.get("hsa_review_due", 0.0))
-                last_order_id = last_cap.get("order_id", inv.get("last_order_id", "ORD-SANDBOX-VERIFIED"))
+                last_order_id = last_cap.get("order_id") or inv.get("last_order_id") or "No Sandbox capture recorded"
+                last_capture_id = last_cap.get("capture_id") or inv.get("last_capture_id") or "No Sandbox capture recorded"
 
                 if is_cg_request:
                     ev_facility = "Verified Healthcare Facility (Privacy-Minimized)"
@@ -996,7 +996,7 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
                     for idx, it in enumerate(inv.get("items", [])):
                         ev_items.append({
                             "code": f"PRIV-MASK-0{idx+1}",
-                            "desc": "Qualified Healthcare Service (Clinical Details Masked for Privacy)",
+                            "desc": "Healthcare Service (Clinical Details Masked for Privacy)",
                             "charge": it.get("charge", 0.0),
                             "insured": it.get("insured", 0.0),
                             "due": it.get("due", 0.0),
@@ -1019,13 +1019,13 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
                     "currency": inv.get("currency", "USD"),
                     "total_patient_due": patient_due,
                     "total_settled_via_paypal": total_paid,
-                    "paypal_capture_id": last_cap.get("capture_id", "SANDBOX-SETTLED"),
+                    "paypal_capture_id": last_capture_id,
                     "paypal_order_id": last_order_id,
                     "hsa_eligible_amount": hsa_el,
                     "hsa_review_amount": hsa_rev,
                     "privacy_minimized_mode": is_cg_request,
-                    "statutory_reference": "IRC § 213(d) / IRS Publication 502 (Medical and Dental Expenses)",
-                    "rules_version": "2026-v1.0-CAREPAY-BENCHMARK",
+                    "statutory_reference": "IRC § 213(d) / IRS Publication 502 (Educational Expense Summary)",
+                    "rules_version": "2026-v1.0-CAREPAY-ILLUSTRATIVE",
                     "legal_notice": (
                         "Eligibility estimate and substantiation record only. CarePay does not provide tax, legal, or plan-administrator advice. "
                         "HSA/FSA eligibility may depend on the item, diagnosis, medical necessity, and your specific plan rules. "

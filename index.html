@@ -1650,8 +1650,8 @@
         <div class="appeal-modal-title">
           <span style="font-size:24px;">🧾</span>
           <div>
-            <h3 id="hsaModalTitle" style="margin:0; font-size:18px; color:#34d399;">HSA / FSA Healthcare Expense Evidence Record</h3>
-            <p id="hsaModalSub" style="margin:0; font-size:12px; color:var(--text-muted);">IRC § 213(d) & IRS Publication 502 Substantiation Format (CarePay Verifiable Record)</p>
+            <h3 id="hsaModalTitle" style="margin:0; font-size:18px; color:#34d399;">HSA / FSA Healthcare Expense Summary (Educational)</h3>
+            <p id="hsaModalSub" style="margin:0; font-size:12px; color:var(--text-muted);">IRC § 213(d) & IRS Publication 502 Educational Expense Summary (Illustrative Local Record)</p>
           </div>
         </div>
         <button class="modal-close-x" onclick="closeHsaEvidenceModal()" title="Close">&times;</button>
@@ -2086,9 +2086,9 @@
       }
       if (dispHsaNote) {
         if (hsaReview > 0) {
-          dispHsaNote.textContent = `(IRC § 213(d) Pre-Screened • $${hsaReview.toFixed(2)} OTC Review Req.)`;
+          dispHsaNote.textContent = `(IRC § 213(d) Educational Estimate • $${hsaReview.toFixed(2)} OTC/LMN Review Note)`;
         } else {
-          dispHsaNote.textContent = `(IRC § 213(d) Qualified Medical Expense)`;
+          dispHsaNote.textContent = `(IRC § 213(d) Educational Estimate — Subject to Administrator Review)`;
         }
       }
 
@@ -2133,8 +2133,8 @@
             const hsaBadge = document.createElement('span');
             if (item.hsa_status === 'ELIGIBLE') {
               hsaBadge.className = 'hsa-badge eligible';
-              hsaBadge.textContent = '🛡️ HSA/FSA Eligible';
-              hsaBadge.title = item.hsa_reason || 'Qualified medical expense under IRC § 213(d)';
+              hsaBadge.textContent = '🛡️ HSA/FSA Est. Eligible';
+              hsaBadge.title = item.hsa_reason || 'Potentially eligible medical expense estimate under IRC § 213(d) (subject to plan review)';
             } else if (item.hsa_status === 'POTENTIALLY_ELIGIBLE') {
               hsaBadge.className = 'hsa-badge review';
               hsaBadge.textContent = '⚠️ HSA/FSA Review Req.';
@@ -2297,8 +2297,8 @@
       const modal = document.getElementById('appealModal');
       const letterPre = document.getElementById('appealLetterText');
       letterPre.textContent = (currentLang === 'ko') 
-        ? "AI가 청구서 실데이터를 분석하여 No Surprises Act 법률 이의신청서를 작성 중입니다..." 
-        : "Auditing live statement data and generating formal dispute letter under US No Surprises Act...";
+        ? "청구서 항목을 바탕으로 환자용 병원 청구 문의 초안을 작성 중입니다..." 
+        : "Preparing educational patient billing inquiry draft referencing 45 CFR § 149.410...";
       modal.style.display = 'flex';
 
       fetch('/api/appeal/generate', {
@@ -2373,7 +2373,7 @@
         alert("Please allow popups to print or save the letter as PDF.");
         return;
       }
-      printWindow.document.write('<!DOCTYPE html><html><head><title>No Surprises Act Dispute Letter</title>');
+      printWindow.document.write('<!DOCTYPE html><html><head><title>Patient Billing Inquiry Draft</title>');
       printWindow.document.write('<style>body { font-family: monospace, serif; font-size: 11pt; line-height: 1.5; white-space: pre-wrap; padding: 40px; color: #000; }</style></head><body>');
       printWindow.document.write(text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'));
       printWindow.document.write('</body></html>');
@@ -2410,14 +2410,14 @@
             slip += `Date of Service     : ${ev.service_date}\n`;
             slip += `Patient Name        : ${ev.patient_name}\n`;
             slip += `Currency            : ${ev.currency}\n\n`;
-            slip += `[PAYPAL TRANSACTION & CAPTURE SETTLEMENT]\n`;
-            slip += `PayPal Order ID     : ${ev.paypal_order_id || 'ORD-SANDBOX-VERIFIED'}\n`;
-            slip += `PayPal Capture ID   : ${ev.paypal_capture_id || 'CAP-SANDBOX-SETTLED'}\n`;
+            slip += `[PAYPAL SANDBOX TRANSACTION SUMMARY]\n`;
+            slip += `PayPal Order ID     : ${ev.paypal_order_id || 'No Sandbox capture recorded'}\n`;
+            slip += `PayPal Capture ID   : ${ev.paypal_capture_id || 'No Sandbox capture recorded'}\n`;
             slip += `Patient Bill Total  : $${Number(ev.total_patient_due || 0).toFixed(2)}\n`;
             slip += `Settled via PayPal  : $${Number(ev.total_settled_via_paypal || 0).toFixed(2)}\n\n`;
-            slip += `[HSA / FSA ELIGIBILITY PRE-SCREEN ALLOCATION]\n`;
-            slip += `• Pre-Screened Qualified Medical Expense (IRC § 213(d)) : $${Number(ev.hsa_eligible_amount || 0).toFixed(2)}\n`;
-            slip += `• Documentation / LMN Review Required (OTC/Supplement)  : $${Number(ev.hsa_review_amount || 0).toFixed(2)}\n\n`;
+            slip += `[HSA / FSA EDUCATIONAL ELIGIBILITY ESTIMATE]\n`;
+            slip += `• Estimated Eligible Medical Expense (IRC § 213(d) Guide) : $${Number(ev.hsa_eligible_amount || 0).toFixed(2)}\n`;
+            slip += `• Documentation / LMN Review Note (OTC/Supplement)        : $${Number(ev.hsa_review_amount || 0).toFixed(2)}\n\n`;
             slip += `[ITEMIZED CLINICAL SERVICE BREAKDOWN]\n`;
             slip += "----------------------------------------------------------------------------------------\n";
             slip += "Code         Description                                   Billed    Paid Due   HSA Status\n";
