@@ -282,7 +282,7 @@ SAMPLE_BILLS = {
                 "markup_ratio": 2.53,
                 "hsa_status": "ELIGIBLE",
                 "hsa_category": "Clinical Diagnostic & Treatment",
-                "hsa_reason": "Qualified medical care expense under IRC § 213(d)(1)(A)"
+                "hsa_reason": "Potentially eligible medical care expense under IRC § 213(d)(1)(A) (verify with plan administrator)"
             },
             {
                 "code": "CPT 71046",
@@ -295,7 +295,7 @@ SAMPLE_BILLS = {
                 "markup_ratio": 4.32,
                 "hsa_status": "ELIGIBLE",
                 "hsa_category": "Clinical Diagnostic & Treatment",
-                "hsa_reason": "Qualified medical care expense under IRC § 213(d)(1)(A)"
+                "hsa_reason": "Potentially eligible medical care expense under IRC § 213(d)(1)(A) (verify with plan administrator)"
             },
             {
                 "code": "CPT 96372",
@@ -308,7 +308,7 @@ SAMPLE_BILLS = {
                 "markup_ratio": 3.63,
                 "hsa_status": "ELIGIBLE",
                 "hsa_category": "Clinical Diagnostic & Treatment",
-                "hsa_reason": "Qualified medical care expense under IRC § 213(d)(1)(A)"
+                "hsa_reason": "Potentially eligible medical care expense under IRC § 213(d)(1)(A) (verify with plan administrator)"
             }
         ],
         "ai_insights": [
@@ -346,7 +346,7 @@ SAMPLE_BILLS = {
                 "markup_ratio": None,
                 "hsa_status": "ELIGIBLE",
                 "hsa_category": "Prescription Medication (Rx)",
-                "hsa_reason": "Qualified medical expense under IRC § 213(b) (Valid clinician prescription)"
+                "hsa_reason": "Potentially eligible prescription expense under IRC § 213(b) (verify with plan administrator)"
             },
             {
                 "code": "NDC 00069-0260",
@@ -359,7 +359,7 @@ SAMPLE_BILLS = {
                 "markup_ratio": None,
                 "hsa_status": "ELIGIBLE",
                 "hsa_category": "Prescription Medication (Rx)",
-                "hsa_reason": "Qualified medical expense under IRC § 213(b) (Valid clinician prescription)"
+                "hsa_reason": "Potentially eligible prescription expense under IRC § 213(b) (verify with plan administrator)"
             },
             {
                 "code": "OTC 84920",
