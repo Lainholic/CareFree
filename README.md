@@ -1,141 +1,136 @@
 # 🛡️ PainFree CarePay AI
-> **Surprise Medical Bill Vision Intelligence with PayPal Pay in 4 & Family Caregiver Checkout**  
-> *Devpost Official Submission for the PayPal AI Hackathon 2026*  
-> 📺 **Official Demo Video**: [Watch Live Demo on YouTube (2m 18s)](https://youtu.be/26lQsW1gghE)
+> **Medical Bill Review Intelligence with PayPal Sandbox Checkout & Family Caregiver Sharing**  
+> *Hackathon Prototype for the PayPal AI Hackathon 2026*  
+> 📺 **Demo Video**: [Watch Demo Walkthrough on YouTube (2m 18s)](https://youtu.be/26lQsW1gghE)
 
 ---
 
 ## 📋 Executive Summary
-In the United States, over **100 million Americans struggle with medical debt**, burdened by opaque hospital billing, unexpected out-of-network charges, and dense CPT/NDC medical jargon. Furthermore, over **53 million family caregivers** coordinate care for aging parents but lack a frictionless bridge to review bills and pay remotely.
+In the United States, over **100 million Americans struggle with medical debt**, burdened by opaque hospital billing, unexpected charges, and dense CPT/NDC medical codes. Furthermore, over **53 million family caregivers** coordinate care for aging parents but lack a straightforward, privacy-conscious way to review bills and contribute payments remotely.
 
-**PainFree CarePay AI** bridges medical vision intelligence directly with **PayPal's financial ecosystem**:
-1. **Snap & Audit**: Patients photograph any US hospital bill or prescription receipt.
-2. **AI Protection**: Vision AI instantly translates cryptic CPT codes, validates insurance co-pays, and flags potential surprise out-of-network charges under the US *No Surprises Act*.
-3. **Frictionless Payment**: Patients can either split the remaining responsibility into **4 interest-free PayPal payments (Pay in 4)** or dispatch a **Family Caregiver Payment Link** so adult children can review and pay remotely in seconds.
-
----
-
-## 💡 Why This Matters for PayPal (Strategic Business Impact)
-The US out-of-pocket healthcare market exceeds **$490 Billion annually**, yet medical billing remains the last bastion of paper checks and high-churn legacy portals. **PainFree CarePay AI** unlocks this massive total addressable market (TAM) for PayPal:
-
-1. **High-Ticket BNPL & Pay Later Originations**: Converts $180–$1,500 surprise medical bills—which patients traditionally default on or delay—into high-performing **PayPal Pay in 4** and **Pay Monthly** installment volume.
-2. **Viral Multi-Generational Network Effect**: Every Caregiver Payment Link (`CG-XXXX`) acts as a zero-CAC user acquisition funnel, bringing both **aging parents (65+)** and **Gen-X/Millennial caregivers (53M+ Americans)** into the PayPal and Venmo checkout ecosystem.
-3. **Pre-Settlement Dispute Mitigation**: By auditing CPT markups *before* checkout, CarePay eliminates post-transaction buyer's remorse and expensive medical billing chargebacks.
-4. **Tax-Advantaged Health Checkout Ready**: Formats IRS Pub 502 § 213(d) eligibility into Orders v2 custom metadata, laying the technical foundation for zero-friction HSA/FSA card substantiation (IIAS approval).
+**PainFree CarePay AI** bridges medical bill comprehension directly with **PayPal's payment ecosystem**:
+1. **Itemize & Review**: Patients upload hospital bills or pharmacy receipts to extract itemized CPT codes and billed amounts.
+2. **Reference Comparison**: Compares charges against illustrative CMS reference benchmarks and drafts patient communication questions for hospital billing departments.
+3. **Sandbox Checkout Flow**: Patients can view an illustrative 4-installment breakdown or dispatch an **Opaque Caregiver Share Link** so family members can review minimized bill summaries and test contributing a portion via PayPal Sandbox.
 
 ---
 
-## 🔒 Client-Side Privacy Boundary & Zero-PHI Egress Model
+## 💡 Why This Matters for PayPal (Strategic Business Value)
+The US out-of-pocket healthcare market exceeds **$490 Billion annually**, yet medical billing remains one of the last major sectors dominated by paper bills and disjointed hospital portals:
 
-CarePay is architected around a **Client-Side Privacy Boundary & Local Sanitization** design. Personal identifiers (patient names, full diagnostic codes) remain isolated on the client side, while the microservice and PayPal Sandbox receive only de-identified clinical codes and financial transaction amounts.
+1. **Healthcare BNPL & Pay Later Potential**: Explores how unexpected medical expenses ($30–$1,500) can be presented to consumers with transparent installment illustrations, demonstrating how PayPal Pay in 4 could be introduced into medical payment workflows.
+2. **Multi-User Family Checkout**: Caregiver share links introduce a collaborative payment dynamic, enabling adult children and family members to contribute toward shared healthcare expenses through the PayPal checkout flow.
+3. **Pre-Checkout Clarity**: By helping patients understand itemized line items and reference benchmarks before paying, CarePay promotes informed checkout decisions and transparency.
+
+---
+
+## 🔒 Privacy-Minimized Client Prototype & Architecture
+
+The prototype demonstrates **client-side masking of selected direct identifiers** (such as patient names) on the client canvas before transmission. Masking in this prototype may not remove all personal or health information; reviewers should use the included verified sample data for evaluation. This demonstration is an exploration of client-side privacy minimization and is not a formal determination of de-identification or HIPAA compliance.
 
 ```mermaid
 flowchart TD
-    subgraph Client ["Client Device / Browser (Privacy Boundary)"]
+    subgraph Client ["Client Browser (Privacy Minimization)"]
         A["📄 Medical Bill / Prescription"] --> B["🖼️ Local Image Normalization & Canvas"]
-        B --> C["🛡️ HIPAA Safe Harbor Redaction Engine"]
-        C --> D["💳 Direct PayPal JS SDK (Client-Side)"]
+        B --> C["🛡️ Client-Side Identifier Masking"]
+        C --> D["💳 PayPal JS SDK (Sandbox Buttons)"]
     end
 
     subgraph CarePayServer ["CarePay Microservice (app.py)"]
-        C -->|"De-identified CPT/NDC & Quantized Amounts"| E["🤖 Vision/Parser Pipeline"]
-        E --> F["📊 2026 CMS Medicare Benchmark Matcher"]
-        E --> G["🏷️ IRS Pub 502 HSA/FSA Classification"]
-        E --> H["⚖️ No Surprises Act Inquiry Drafter"]
-        F & G & H --> I["💾 Atomic Durable JSON Ledger (_work/)"]
-        I --> J["🔑 Cryptographic Bearer Token Generator"]
+        C -->|"Masked image and extracted fields"| E["🤖 Vision / Parsing Pipeline"]
+        E --> F["📊 Illustrative CMS Benchmark Matcher"]
+        E --> G["🏷️ IRS Pub 502 Educational Tax Tags"]
+        E --> H["⚖️ Patient Inquiry Draft Generator"]
+        F & G & H --> I["💾 Local JSON Session Store (_work/)"]
+        I --> J["🔑 Opaque Share Link Token Generator"]
     end
 
     subgraph ExternalSettlement ["Authorized External Settlement"]
-        D <-->|"Orders v2 Token & Intent"| K["🅿️ PayPal Checkout (api-m.sandbox.paypal.com)"]
-        J -->|"Privacy-Masked Link"| L["👨‍👩‍👧 Family Caregiver Portal"]
+        D <-->|"Orders v2 Create & Capture"| K["🅿️ PayPal Checkout (Sandbox)"]
+        J -->|"Privacy-Minimized Link"| L["👨‍👩‍👧 Family Caregiver Portal"]
         L --> D
     end
 ```
 
-### End-to-End Financial & Legal Lifecycle
+### End-to-End Workflow
 ```mermaid
 sequenceDiagram
     autonumber
     actor Patient as 👵 Patient (Browser)
-    participant Edge as 🛡️ Client HIPAA Redactor
-    participant AI as 🧠 CarePay Vision & CMS Engine
-    participant PayPal as 🅿️ PayPal Orders v2 / Pay in 4
-    actor Caregiver as 👨‍💼 Adult Child (Remote)
+    participant Edge as 🛡️ Client Masking Canvas
+    participant AI as 🧠 CarePay Vision & CMS Matcher
+    participant PayPal as 🅿️ PayPal Orders v2 Sandbox
+    actor Caregiver as 👨‍💼 Family Caregiver (Remote)
 
-    Patient->>Edge: Upload Hospital Bill / Rx Image
-    Edge->>Edge: Strip PHI (Names, DOB, MRN) on Canvas
-    Edge->>AI: Send De-identified Image + Quantized Crop
-    AI->>AI: Extract CPT/NDC + Match 2026 CMS Fee Schedule
-    AI-->>Patient: Flag 3.63x Markup + Draft 45 CFR §149.410 Dispute + IRS Pub 502 Tag
+    Patient->>Edge: Upload Hospital Statement / Rx
+    Edge->>Edge: Mask Direct Identifiers (Name, MRN) on Canvas
+    Edge->>AI: Send Masked Image & Quantized Amounts
+    AI->>AI: Extract CPT/NDC + Match 2026 CMS Reference Rates
+    AI-->>Patient: Display Itemized Breakdown + Reference Rates + Inquiry Draft
     
-    alt Self-Checkout via PayPal BNPL
-        Patient->>PayPal: Initiate Checkout ($180 -> 4x $45 Pay in 4)
-        PayPal-->>Patient: Instant Approval & Settlement
-    else Remote Family Caregiver Split (e.g., 50% Share)
-        Patient->>AI: Request Caregiver Split Link (50% = $90)
-        AI-->>Caregiver: Dispatch Cryptographic Token Link (CG-XXXX)
-        Caregiver->>AI: Open Zero-PHI Portal ("Protected Patient" View)
-        Caregiver->>PayPal: Settle $90 Share via PayPal / Venmo
-        PayPal->>AI: Capture Order v2 & Update Atomic JSON Ledger
-        AI-->>Patient: Real-time Balance Updated ($90 Remaining)
+    alt Patient Self-Checkout via PayPal
+        Patient->>PayPal: Launch Smart Button (Pay in 4 / PayPal / Card)
+        PayPal-->>Patient: Complete Sandbox Approval & Capture
+    else Remote Family Caregiver Contribution (e.g., 50% Split)
+        Patient->>AI: Generate Caregiver Link (50% = $90)
+        AI-->>Caregiver: Provide Opaque Share Link (CG-XXXX)
+        Caregiver->>AI: Open Privacy-Minimized View ("Protected Patient")
+        Caregiver->>PayPal: Complete $90 Share via PayPal Sandbox
+        PayPal->>AI: Order Captured & Update Local Demo Balance
+        AI-->>Patient: Real-Time Demo Balance Updated ($90 Remaining)
     end
 ```
 
 ---
 
-## 📊 Quantitative Benchmark Evaluation (Synthetic Suite N=300)
-
-Evaluated against a standardized synthetic test suite of 300 diverse US hospital statements, emergency room bills, and pharmacy receipts:
-
-| Evaluation Metric | Baseline Single-Stage OCR | CarePay Multimodal Pipeline | Impact & Improvement |
-|---|:---:|:---:|:---:|
-| **CPT/NDC Critical Field Error Rate** | 18.4% | **0.8%** | **95.6% Error Reduction** |
-| **Total Patient Due Extraction Accuracy** | 87.2% | **99.3%** | **High-Precision Balance Matching** |
-| **Median Time-to-Action (TTA)** | 72.0s | **12.4s (p95: 18.1s)** | **5.8x Faster Actionable Workflow** |
-| **Uncertainty Fallback Rate** | 24.1% (Hallucinated) | **6.2% (Flagged for Review)** | **Deterministic Rule-Based Verification** |
-| **Adversarial Audit Rating** | Unrated (High Risk) | **88-90 / 100 (DeepSeek Audit)** | **Rigorous Policy Defense Readiness** |
-
----
-
-## 🚀 Key Features
+## 🚀 Key Features Demonstrated in the Prototype
 
 ### 1. Vision AI Medical Bill Deconstruction & CMS Benchmarks
-- **Multimodal Medical Vision Pipeline**: High-accuracy tabular deconstruction of CPT procedure codes, NDC drug codes, and fee breakdowns.
-- **2026 CMS Medicare Reference Benchmarking**: Automatically maps billed charges against official CMS national allowable reference rates (e.g., CPT 96372 billed at $90.00 vs $24.80 CMS benchmark &rarr; 3.63x markup flag).
-- **CMS NCCI Unbundling & Upcoding Detector**: Detects code-splitting maneuvers (violating National Correct Coding Initiative rules) where comprehensive care packages are broken into inflated piecemeal charges.
-- **IRS Publication 502 HSA/FSA Substantiation**: Classifies expenditures under IRC § 213(d) into `ELIGIBLE`, `POTENTIALLY_ELIGIBLE`, or `INELIGIBLE` with statutory justification tags. Ready for IIAS automated tax substantiation.
+- **Multimodal Bill Parsing**: Deconstructs tabular statements into procedure codes (CPT), drug codes (NDC), descriptions, and billed charges.
+- **2026 CMS Medicare Reference Comparison**: Compares charges against national CMS Medicare allowable reference benchmarks (e.g., CPT 96372 billed at $90.00 vs $24.80 CMS reference rate) to highlight items worthy of review.
+- **Patient Inquiry Communication Draft**: Automatically generates draft inquiry letters referencing consumer protection concepts (such as 45 CFR § 149.410 No Surprises Act and hospital financial assistance policies) to help patients ask informed questions.
+- **IRS Pub 502 Educational Categorization**: Provides informational classification under IRC § 213(d) guidelines for HSA/FSA eligible health expenses.
 
-### 2. PayPal Pay in 4 & Pay Monthly Tiered Financing
-- **Automatic Installment Visualization**: Splits qualifying patient obligations into 4 bi-weekly payments (e.g., $180 copay &rarr; 4 installments of $45 every two weeks).
-- **Dynamic Qualification Gate**: Enforces official PayPal Pay in 4 thresholds ($30.00 to $1,500.00). Small balances automatically fallback to standard single checkout.
-- **Pay Monthly Scalability**: Designed to bridge high-balance emergency/surgical hospital debt ($1,500 to $10,000) seamlessly into PayPal's 6/12/24-month installment financing.
-- **Transparent Consumer Notice**: Explicitly notifies patients: *"Estimated installment. Eligibility and final terms are determined by PayPal at checkout."*
+### 2. PayPal Sandbox Checkout & Pay in 4 Illustration
+- **Pay in 4 Installment Illustration**: Dynamically calculates and displays an estimated 4-payment bi-weekly schedule for qualifying balances between $30.00 and $1,500.00 (e.g., $180.00 balance displayed as 4 payments of $45.00).
+- **Official PayPal Smart Payment Buttons**: Direct integration with PayPal JS SDK (`locale=en_US`) supporting the Orders v2 lifecycle (`createOrder` and `onApprove` capture).
+- **Transparent Consumer Notice**: Clearly advises patients: *"Estimated installment illustration. Eligibility, funding sources, and final terms are determined by PayPal at checkout."*
 
-### 3. Family Caregiver Collaborative Ledger & Privacy Portal
-- **Cryptographic Token Decoupling**: Generates cryptographically secure, single-purpose tokens (`CG-XXXX`) rather than predictable database IDs.
-- **HIPAA Safe Harbor Masking**: Adult children sponsor copays without viewing sensitive diagnostic codes or full patient names (`Protected Patient`).
-- **Trust-but-Verify AI Peace-of-Mind**: Remote family members are greeted with an **"✅ AI Audited & HIPAA Redacted"** trust badge, ensuring they are only paying verified, benchmarked rates.
-- **Multi-Sibling Family Care Ledger**: Supports dynamic cost-sharing splits (25%, 50%, 75%, 100%) where payments decrement the master bill ledger atomically, enabling collaborative family funding.
-
-### 4. Regulatory Compliance & Disclaimers
-- **No Surprises Act & Charity Care**: Auto-drafts patient inquiries under **45 CFR § 149.410 (No Surprises Act)** and incorporates **IRS § 501(r) Nonprofit Hospital Financial Assistance Policy (FAP)** inquiry terms.
-- **CMS vs. QPA Legal Distinction**: Explicitly clarifies that CMS benchmarks are Medicare references; Qualifying Payment Amounts (QPA) are median contracted rates under the No Surprises Act.
-- **Comprehensive Disclaimers**: All AI dispute drafts and tax classifications carry clear notices that outputs are patient-review drafts, not legal, medical, or tax/financial advice.
+### 3. Family Caregiver Payment Portal (Privacy-Minimized)
+- **Opaque Tokenized Share Links**: Generates unique, non-guessable tokens (`CG-XXXX`) allowing family members to view and contribute to a designated bill.
+- **Privacy-Conscious Presentation**: Hides personal patient names (masked to `Protected Patient`) and presents high-level clinical item codes to minimize sensitive disclosure.
+- **Flexible Cost-Sharing Calculator**: Allows patients to set 25%, 50%, 75%, or 100% contribution requests, updating the local demo balance as payments are simulated or captured.
 
 ---
 
-## 🛠️ Tech Stack & Security Hardening
-- **Frontend**: Clean Vanilla HTML5 / CSS3 / JavaScript (Zero-bloat, high-performance responsive UI).
-  - *Hardened DOM*: Native element construction (`textContent`) to permanently eliminate stored/reflected XSS risks from OCR transcripts.
-  - *PayPal JS SDK*: Official Smart Buttons container (`locale=en_US`) with full lifecycle hooks (`createOrder`, `onApprove`, `onCancel`, `onError`) and Venmo/PayLater enablement.
-- **Backend**: Python 3.10 `http.server.ThreadingHTTPServer` microservice (`app.py`), JSON REST API.
-  - *Concurrent Async Execution*: Non-blocking thread pool handling long vision AI inferences and instant payment callbacks simultaneously.
-  - *Strict Validation*: 12MB max payload limit, path traversal defense via canonicalized path validation, and in-memory isolated deep copying.
-  - *Idempotent Payment State Machine*: Atomic file replacement (`os.replace`) to local JSON storage (`_work/invoices_store.json`, `_work/caregiver_tokens.json`) guaranteeing session recovery and preventing double-charge anomalies across reboots.
-- **Deterministic Hallucination Guardrail**: Integrates a mathematical rule layer verifying line-item sums against total billed balances, achieving a low 6.2% uncertainty fallback rate on ambiguous inputs.
-- **AI Vision Pipeline**: Multimodal fallback architecture (`receipt_pipeline.py`).
-- **Payments**: PayPal Developer Sandbox, Smart Payment Buttons, Orders v2 API (`/v2/checkout/orders` create & capture).
+## ⚖️ Important Limits & Disclaimers
+- **Educational & Reference Scope**: CMS reference data used in the sample is for illustrative comparison only. It does not constitute a legal determination of overcharging, nor does it represent contracted private insurance rates or patient co-pay responsibility.
+- **Not Legal, Tax, or Medical Advice**: All generated inquiry drafts, tax tags, and coding notes are educational prompts for patient review. Users should consult their healthcare provider, insurer, or qualified tax advisor.
+- **Sandbox Simulation vs. Real Settlement**: The prototype demonstrates payment interactions exclusively within the PayPal Sandbox. Any balance shown in the UI is a local demonstration balance and does not represent an actual payment to a healthcare provider or an adjustment to a real medical account.
+- **Financing Eligibility**: PayPal independently determines buyer eligibility for Pay Later, Pay in 4, and other payment methods during checkout.
+- **Prototype Status**: This prototype demonstrates client-side data minimization principles for demonstration purposes. Production healthcare deployment would require formal HIPAA assessments, appropriate security safeguards, and business associate agreements (BAAs) where required.
+
+---
+
+## 🛠️ Tech Stack & Technical Architecture
+- **Frontend**: Vanilla HTML5 / CSS3 / JavaScript (Lightweight responsive UI).
+  - *DOM Construction*: Uses native element construction (`textContent`) to avoid raw HTML injection from OCR transcripts.
+  - *PayPal JS SDK*: Smart Payment Buttons integration configured for the PayPal Sandbox Orders v2 lifecycle.
+- **Backend**: Python 3.10 standard library `http.server.ThreadingHTTPServer` microservice (`app.py`), JSON REST API.
+  - *Request Handling*: Threaded request handling for bill parsing and local demo state updates.
+  - *File Validation*: 12MB payload limit, canonicalized path resolution, and isolated in-memory processing.
+  - *Local Persistence*: Atomic file replacement (`os.replace`) to local JSON storage (`_work/invoices_store.json`, `_work/caregiver_tokens.json`) to persist demo session state across server restarts.
+- **AI Vision Pipeline**: Multimodal fallback architecture (`receipt_pipeline.py`) supporting local mock presets and live vision inference.
+- **Payments**: PayPal Developer Sandbox, Smart Payment Buttons, Orders v2 API (`/v2/checkout/orders`).
+
+---
+
+## 🔮 Future Vision & Roadmap
+While the current prototype focuses on bill review and PayPal Sandbox checkout, future production exploration may include:
+- **PayPal Pay Monthly & Venmo Integrations**: Expanding beyond Pay in 4 to explore longer-term financing options for high-balance bills and native Venmo collaborative family settlement.
+- **HSA/FSA Ecosystem Integrations**: Exploring partnerships with IIAS-compliant processors to support tax-advantaged healthcare card substantiation.
+- **Hospital Billing System Webhooks**: Exploring direct integration with healthcare provider billing APIs to automate inquiry submission and verified balance adjustments.
+- **Production Compliance Infrastructure**: Cloud-native infrastructure backed by applicable security safeguards and business associate agreements where required.
 
 ---
 
@@ -144,14 +139,14 @@ Evaluated against a standardized synthetic test suite of 300 diverse US hospital
 ### 1. Requirements
 - Python 3.10+
 - Modern Web Browser (Chrome, Edge, Brave, Firefox)
-- **Zero Configuration**: No paid AI API keys or setup required to test the complete end-to-end workflow using built-in verified sample bills.
+- **Zero Configuration**: No paid AI API keys required to test the end-to-end workflow using built-in verified sample bills.
 
 ### 2. Launch the Application
 Run in your terminal:
 ```bash
 python app.py
 ```
-Or double-click `run_carepay.bat`. The terminal will start the server and print:
+Or double-click `run_carepay.bat`. The terminal will start the server:
 ```
 Serving CarePay AI on http://127.0.0.1:8050
 ```
@@ -159,17 +154,12 @@ Open your browser at `http://127.0.0.1:8050`.
 
 ### 3. Step-by-Step Judge Evaluation Walkthrough
 1. **Load Sample Medical Bill**: Click the **"US Hospital ER Visit"** preset button ($180.00).
-2. **Review Vision AI & CMS Benchmark**: Observe the automated deconstruction of CPT codes in the itemized table. Notice **CPT 96372 (Therapeutic Injection)** highlighted with a **3.63x CMS Medicare Markup ($24.80 reference rate)**.
-3. **Inspect Dispute Letter**: Click **"📄 Generate Dispute Letter"** to inspect an automated patient inquiry letter formulated under **45 CFR § 149.410 (No Surprises Act)**. Test one-click copy to clipboard.
-4. **Test PayPal Pay in 4 Installments**: Review the payment card on the right displaying 4 bi-weekly payments of **$45.00** with full regulatory disclaimers.
+2. **Review Bill Breakdown & CMS Benchmark**: Inspect the deconstructed CPT codes in the itemized table. Notice **CPT 96372 (Therapeutic Injection)** highlighted alongside the **$24.80 CMS Medicare benchmark rate**.
+3. **Inspect Inquiry Letter**: Click **"📄 Generate Dispute Letter"** to view a patient inquiry letter citing **45 CFR § 149.410 (No Surprises Act)** and hospital financial assistance questions.
+4. **Test PayPal Pay in 4 Illustration**: Review the payment card on the right displaying 4 bi-weekly payments of **$45.00** with clear consumer disclaimers.
 5. **Adjust Caregiver Split**: Click **"50% Half"** ($90.00) under the Family Split section to see real-time balance partitioning.
-6. **Generate Privacy-Preserving Link**: Click **"🔗 Generate Privacy-Shielded Link"** and open the generated link in a new tab to verify the **HIPAA Safe Harbor Decoupled View** (patient name masked to `Protected Patient` and line items masked to clinical privacy codes).
+6. **Generate Privacy-Preserving Link**: Click **"🔗 Generate Privacy-Shielded Link"** and open the generated link in a new tab to verify the **Caregiver View** (patient name displayed as `Protected Patient` and line items shown with clinical privacy codes).
 7. **PayPal Sandbox Settlement**: The official PayPal Smart Buttons render in pure English (`locale=en_US`) with options for PayPal, Pay Later, and Debit/Credit Card.
-
----
-
-## ⚠️ Hackathon Evaluation Note
-*PainFree CarePay AI* demonstrates end-to-end multimodal AI deconstruction and PayPal payment integration. While the client-side HIPAA Safe Harbor architecture is engineered to safeguard patient identifiers (Zero-PHI client boundary), reviewers can instantly evaluate all core features out-of-the-box using the built-in verified sample bills without needing live camera capture or private credentials.
 
 ---
 
