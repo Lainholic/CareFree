@@ -198,7 +198,7 @@ def classify_hsa_eligibility(code, desc, flag):
         return (
             "POTENTIALLY_ELIGIBLE",
             "Over-the-Counter / Dietary Supplement",
-            "Potential eligibility under IRS Notice 2023-62: May require Letter of Medical Necessity (LMN) from physician depending on plan rules."
+            "Potential eligibility under IRS Publication 502: May require Letter of Medical Necessity (LMN) from physician depending on plan rules."
         )
 
     if "HSA" in flag_upper or "FSA" in flag_upper:
@@ -217,7 +217,7 @@ def classify_hsa_eligibility(code, desc, flag):
 def enrich_invoice_items(items):
     """
     Enriches item list with:
-    1. 2026 CMS Medicare Allowable Benchmark rates and markup multiples.
+    1. Illustrative CMS-style reference values and markup multiples.
     2. IRC § 213(d) / IRS Pub 502 HSA/FSA Eligibility classifications.
     """
     hsa_eligible_total = 0.0
@@ -386,6 +386,7 @@ SAMPLE_BILLS = {
 }
 
 ORDER_TO_INVOICE = {}
+IN_FLIGHT_INVOICES = set()
 if PAYPAL_MODE.lower() != "sandbox":
     print(f"[Security Notice] Non-sandbox PAYPAL_MODE='{PAYPAL_MODE}' rejected; enforcing 'sandbox' for prototype safety.")
     PAYPAL_MODE = "sandbox"
@@ -458,17 +459,18 @@ def create_paypal_order(amount, currency="USD", invoice_id="", payment_mode="ful
             with urllib.request.urlopen(req, timeout=12) as resp:
                 res_data = json.loads(resp.read().decode())
                 order_id = res_data.get("id")
-                if not order_id:
+                if not isinstance(order_id, str) or len(order_id.strip()) < 3:
                     return {
                         "success": False,
                         "error": "MISSING_ORDER_ID",
                         "mode": "live_paypal_sandbox_failed",
                         "message": "PayPal Sandbox response did not include a valid order ID."
                     }
+                order_id = order_id.strip()
                 with LEDGER_LOCK:
                     ORDER_TO_INVOICE[order_id] = {
                         "invoice_id": invoice_id,
-                        "amount": amount,
+                        "amount": to_money(amount),
                         "currency": currency,
                         "payment_mode": payment_mode,
                         "captured_already": False,
@@ -479,7 +481,7 @@ def create_paypal_order(amount, currency="USD", invoice_id="", payment_mode="ful
                     "success": True,
                     "order_id": order_id,
                     "status": res_data.get("status", "CREATED"),
-                    "authorized_amount": amount,
+                    "authorized_amount": to_money(amount),
                     "payment_mode": payment_mode,
                     "mode": "live_paypal_sandbox",
                     "raw_order": res_data
@@ -501,110 +503,161 @@ def create_paypal_order(amount, currency="USD", invoice_id="", payment_mode="ful
 
 
 def capture_paypal_order(order_id):
-    # Pre-capture local ledger validation before calling external PayPal gateway
+    order_id = str(order_id or "").strip()
+    # Strict pre-capture local ledger validation & per-invoice lock before calling external PayPal gateway
     with LEDGER_LOCK:
-        pre_meta = ORDER_TO_INVOICE.get(order_id)
-        if pre_meta:
-            if pre_meta.get("captured_already"):
-                return {
-                    "success": False,
-                    "order_id": order_id,
-                    "status": "REPLAY_BLOCKED",
-                    "error": f"Order {order_id} has already been captured in local ledger."
-                }
-            pre_inv_id = pre_meta.get("invoice_id")
-            if pre_inv_id and pre_inv_id in INVOICE_STORE:
-                pre_inv = INVOICE_STORE[pre_inv_id]
-                if pre_inv.get("status") in ("PAID_IN_FULL", "SETTLED_FULL") and float(pre_inv.get("remaining_patient_due", 0.0)) <= 0.01:
-                    return {
-                        "success": False,
-                        "order_id": order_id,
-                        "status": "ALREADY_SETTLED",
-                        "error": f"Invoice {pre_inv_id} is already settled in full. Pre-capture guard blocked duplicate gateway call."
+        if not order_id or order_id not in ORDER_TO_INVOICE:
+            return {
+                "success": False,
+                "order_id": order_id,
+                "status": "UNREGISTERED_ORDER",
+                "error": f"Order '{order_id}' is not registered in the local CarePay ledger. Capture rejected before gateway call."
+            }
+        pre_meta = ORDER_TO_INVOICE[order_id]
+        if pre_meta.get("captured_already"):
+            return {
+                "success": False,
+                "order_id": order_id,
+                "status": "REPLAY_BLOCKED",
+                "error": f"Order {order_id} has already been captured in local ledger."
+            }
+        pre_inv_id = pre_meta.get("invoice_id")
+        if not pre_inv_id or pre_inv_id not in INVOICE_STORE:
+            return {
+                "success": False,
+                "order_id": order_id,
+                "status": "INVOICE_NOT_FOUND",
+                "error": f"Associated invoice '{pre_inv_id}' not found in local ledger."
+            }
+        pre_inv = INVOICE_STORE[pre_inv_id]
+        pre_rem_due = to_money(pre_inv.get("remaining_patient_due", pre_inv.get("patient_due", 0.0)))
+        if pre_inv.get("status") in ("PAID_IN_FULL", "SETTLED_FULL") or pre_rem_due <= 0.01:
+            return {
+                "success": False,
+                "order_id": order_id,
+                "status": "ALREADY_SETTLED",
+                "error": f"Invoice {pre_inv_id} is already settled in full. Pre-capture guard blocked duplicate gateway call."
+            }
+        expected_pre_amt = to_money(pre_meta.get("amount", 0.0))
+        if expected_pre_amt <= 0.0 or expected_pre_amt > pre_rem_due + 0.01:
+            return {
+                "success": False,
+                "order_id": order_id,
+                "status": "EXCEEDS_REMAINING_BALANCE",
+                "error": f"Order amount ${expected_pre_amt:.2f} exceeds remaining invoice balance ${pre_rem_due:.2f}. Capture blocked."
+            }
+        if pre_inv_id in IN_FLIGHT_INVOICES:
+            return {
+                "success": False,
+                "order_id": order_id,
+                "status": "CAPTURE_IN_PROGRESS",
+                "error": f"Another capture is currently in flight for invoice {pre_inv_id}. Concurrent capture blocked."
+            }
+        IN_FLIGHT_INVOICES.add(pre_inv_id)
+
+    try:
+        token = get_paypal_token()
+        if token:
+            try:
+                url = f"{PAYPAL_API_BASE}/v2/checkout/orders/{order_id}/capture"
+                req = urllib.request.Request(
+                    url,
+                    data=b"{}",
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                        "Content-Type": "application/json",
+                        "Prefer": "return=representation",
+                        "PayPal-Request-Id": order_id
                     }
-
-    token = get_paypal_token()
-    if token:
-        try:
-            url = f"{PAYPAL_API_BASE}/v2/checkout/orders/{order_id}/capture"
-            req = urllib.request.Request(
-                url,
-                data=b"{}",
-                headers={
-                    "Authorization": f"Bearer {token}",
-                    "Content-Type": "application/json",
-                    "Prefer": "return=representation",
-                    "PayPal-Request-Id": order_id
-                }
-            )
-            with urllib.request.urlopen(req, timeout=12) as resp:
-                res_data = json.loads(resp.read().decode())
-                status = res_data.get("status")
-                purchase_units = res_data.get("purchase_units", [])
-                captures = purchase_units[0].get("payments", {}).get("captures", []) if purchase_units else []
-                
-                if not captures or status != "COMPLETED":
-                    return {
-                        "success": False,
-                        "order_id": order_id,
-                        "status": status or "FAILED",
-                        "error": "PayPal capture incomplete or rejected by gateway",
-                        "raw_capture": res_data
-                    }
-
-                cap = captures[0]
-                cap_id = cap.get("id")
-                cap_status = cap.get("status")
-                if not cap_id or cap_status != "COMPLETED":
-                    return {
-                        "success": False,
-                        "order_id": order_id,
-                        "status": cap_status or "FAILED",
-                        "error": "Capture status not COMPLETED or missing capture ID",
-                        "raw_capture": res_data
-                    }
-
-                # Authoritative capture amount and currency straight from gateway
-                try:
-                    captured_amount = float(cap.get("amount", {}).get("value", 0.0))
-                except (ValueError, TypeError):
-                    captured_amount = 0.0
-                captured_currency = str(cap.get("amount", {}).get("currency_code", "USD")).strip()
-
-                if captured_amount <= 0.0:
-                    return {
-                        "success": False,
-                        "order_id": order_id,
-                        "status": "FAILED",
-                        "error": "Invalid zero or negative capture amount from gateway",
-                        "raw_capture": res_data
-                    }
-
-                # Update authoritative invoice ledger state with Mutex Lock
-                with LEDGER_LOCK:
-                    if cap_id in PROCESSED_CAPTURE_IDS:
+                )
+                with urllib.request.urlopen(req, timeout=12) as resp:
+                    res_data = json.loads(resp.read().decode())
+                    status = res_data.get("status")
+                    purchase_units = res_data.get("purchase_units", [])
+                    captures = purchase_units[0].get("payments", {}).get("captures", []) if purchase_units else []
+                    
+                    if not captures or status != "COMPLETED":
                         return {
                             "success": False,
                             "order_id": order_id,
-                            "status": "REPLAY_BLOCKED",
-                            "error": f"Capture ID {cap_id} has already been recorded in ledger. Replay blocked."
+                            "status": status or "FAILED",
+                            "error": "PayPal capture incomplete or rejected by gateway",
+                            "raw_capture": res_data
                         }
 
-                    order_meta = ORDER_TO_INVOICE.get(order_id, {})
-                    invoice_id = order_meta.get("invoice_id")
-                    payment_mode = order_meta.get("payment_mode", "full")
-                    expected_amt = to_money(order_meta.get("amount", captured_amount))
-                    if order_meta.get("amount") is not None and abs(to_money(captured_amount) - expected_amt) > 0.01:
+                    cap = captures[0]
+                    cap_id = cap.get("id")
+                    cap_status = cap.get("status")
+                    if not cap_id or cap_status != "COMPLETED":
                         return {
                             "success": False,
                             "order_id": order_id,
-                            "status": "AMOUNT_MISMATCH",
-                            "error": f"Captured amount ${captured_amount:.2f} does not match authorized order amount ${expected_amt:.2f}"
+                            "status": cap_status or "FAILED",
+                            "error": "Capture status not COMPLETED or missing capture ID",
+                            "raw_capture": res_data
                         }
-                    order_meta["captured_already"] = True
-                    settlement_status = "SETTLED_FULL"
 
-                    if invoice_id and invoice_id in INVOICE_STORE:
+                    # Authoritative capture amount and currency straight from gateway
+                    try:
+                        captured_amount = float(cap.get("amount", {}).get("value", 0.0))
+                    except (ValueError, TypeError):
+                        captured_amount = 0.0
+                    captured_currency = str(cap.get("amount", {}).get("currency_code", "USD")).strip()
+
+                    if captured_amount <= 0.0:
+                        return {
+                            "success": False,
+                            "order_id": order_id,
+                            "status": "FAILED",
+                            "error": "Invalid zero or negative capture amount from gateway",
+                            "raw_capture": res_data
+                        }
+
+                    # Update authoritative invoice ledger state with Mutex Lock
+                    with LEDGER_LOCK:
+                        if cap_id in PROCESSED_CAPTURE_IDS:
+                            return {
+                                "success": False,
+                                "order_id": order_id,
+                                "status": "REPLAY_BLOCKED",
+                                "error": f"Capture ID {cap_id} has already been recorded in ledger. Replay blocked."
+                            }
+
+                        order_meta = ORDER_TO_INVOICE.get(order_id)
+                        if not order_meta:
+                            return {
+                                "success": False,
+                                "order_id": order_id,
+                                "status": "UNREGISTERED_ORDER",
+                                "error": f"Order {order_id} missing from ledger."
+                            }
+                        if order_meta.get("captured_already"):
+                            return {
+                                "success": False,
+                                "order_id": order_id,
+                                "status": "REPLAY_BLOCKED",
+                                "error": f"Order {order_id} was already marked captured."
+                            }
+
+                        invoice_id = order_meta.get("invoice_id")
+                        payment_mode = order_meta.get("payment_mode", "full")
+                        expected_amt = to_money(order_meta.get("amount", captured_amount))
+                        if order_meta.get("amount") is not None and abs(to_money(captured_amount) - expected_amt) > 0.01:
+                            return {
+                                "success": False,
+                                "order_id": order_id,
+                                "status": "AMOUNT_MISMATCH",
+                                "error": f"Captured amount ${captured_amount:.2f} does not match authorized order amount ${expected_amt:.2f}"
+                            }
+
+                        if not invoice_id or invoice_id not in INVOICE_STORE:
+                            return {
+                                "success": False,
+                                "order_id": order_id,
+                                "status": "INVOICE_NOT_FOUND",
+                                "error": f"Associated invoice '{invoice_id}' not found in local store."
+                            }
+
                         inv = INVOICE_STORE[invoice_id]
 
                         # Currency invariant check
@@ -617,20 +670,31 @@ def capture_paypal_order(order_id):
                                 "error": f"Captured currency {captured_currency} does not match invoice currency {inv_currency}"
                             }
 
-                        # Double capture guard: if already settled, reject replay
-                        if inv.get("status") in ("PAID_IN_FULL", "SETTLED_FULL") and float(inv.get("remaining_patient_due", 0.0)) <= 0.01:
+                        # Double capture & remaining balance check BEFORE mutating state
+                        rem_now = to_money(inv.get("remaining_patient_due", inv.get("patient_due", 0.0)))
+                        if inv.get("status") in ("PAID_IN_FULL", "SETTLED_FULL") or rem_now <= 0.01:
                             return {
                                 "success": False,
                                 "order_id": order_id,
                                 "status": "ALREADY_SETTLED",
                                 "error": f"Invoice {invoice_id} is already settled in full. Duplicate capture blocked."
                             }
+                        if to_money(captured_amount) > rem_now + 0.01:
+                            return {
+                                "success": False,
+                                "order_id": order_id,
+                                "status": "EXCEEDS_REMAINING_BALANCE",
+                                "error": f"Captured amount ${captured_amount:.2f} exceeds remaining balance ${rem_now:.2f}."
+                            }
 
+                        # All checks passed: mark order captured and update invoice ledger
+                        order_meta["captured_already"] = True
                         total_patient_due = to_money(inv.get("patient_due", 0.0))
                         disputed_amt = to_money(inv.get("disputed_due", 0.0))
                         prior_paid = to_money(inv.get("total_captured_amount", 0.0))
                         new_paid_total = to_money(prior_paid + captured_amount)
                         inv["total_captured_amount"] = new_paid_total
+                        inv["paid_amount"] = new_paid_total
 
                         rem = max(0.0, to_money(total_patient_due - new_paid_total))
                         inv["remaining_patient_due"] = rem
@@ -647,6 +711,7 @@ def capture_paypal_order(order_id):
                         elif payment_mode == "family_split":
                             prior_fam = to_money(inv.get("family_contributions_total", 0.0))
                             inv["family_contributions_total"] = to_money(prior_fam + captured_amount)
+                            inv["family_contributions_count"] = int(inv.get("family_contributions_count", 0)) + 1
                             settlement_status = "SETTLED_FULL" if rem <= 0.01 else "PARTIALLY_SETTLED"
                             inv["status"] = settlement_status
                         else:
@@ -664,41 +729,40 @@ def capture_paypal_order(order_id):
                         })
                         PROCESSED_CAPTURE_IDS.add(cap_id)
                         inv["last_capture_id"] = cap_id
+                        inv["last_order_id"] = order_id
                         inv["paid_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
                         ACTIVE_INVOICE_ORDERS.pop(invoice_id, None)
                         save_persisted_state()
-                    else:
-                        settlement_status = "CAPTURED_UNMAPPED"
-                        PROCESSED_CAPTURE_IDS.add(cap_id)
-                        save_persisted_state()
-                        print(f"[Warning] Captured order {order_id} has no matching local invoice in store.")
 
+                    return {
+                        "success": True,
+                        "capture_id": cap_id,
+                        "order_id": order_id,
+                        "status": "COMPLETED",
+                        "settlement_status": settlement_status,
+                        "invoice_id": invoice_id,
+                        "captured_amount": captured_amount,
+                        "payment_mode": payment_mode,
+                        "mode": "live_paypal_sandbox",
+                        "raw_capture": res_data
+                    }
+            except Exception as e:
+                print(f"[PayPal Capture Order Error] {e}")
                 return {
-                    "success": True,
-                    "capture_id": cap_id,
-                    "order_id": order_id,
-                    "status": "COMPLETED",
-                    "settlement_status": settlement_status,
-                    "invoice_id": invoice_id,
-                    "captured_amount": captured_amount,
-                    "payment_mode": payment_mode,
-                    "mode": "live_paypal_sandbox",
-                    "raw_capture": res_data
+                    "success": False,
+                    "error": "ORDER_CAPTURE_FAILED",
+                    "mode": "live_paypal_sandbox_failed",
+                    "message": "PayPal Sandbox order capture encountered a gateway error."
                 }
-        except Exception as e:
-            print(f"[PayPal Capture Order Error] {e}")
-            return {
-                "success": False,
-                "error": "ORDER_CAPTURE_FAILED",
-                "mode": "live_paypal_sandbox_failed",
-                "message": "PayPal Sandbox order capture encountered a gateway error."
-            }
 
-    return {
-        "success": False,
-        "error": "Invalid order_id or missing PayPal credentials",
-        "message": "Cannot capture order without active PayPal credentials."
-    }
+        return {
+            "success": False,
+            "error": "Invalid order_id or missing PayPal credentials",
+            "message": "Cannot capture order without active PayPal credentials."
+        }
+    finally:
+        with LEDGER_LOCK:
+            IN_FLIGHT_INVOICES.discard(pre_inv_id)
 
 
 class CarePayHandler(http.server.SimpleHTTPRequestHandler):
@@ -770,8 +834,9 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
                     self.send_json({"success": False, "error": "Invalid or expired caregiver token", "message": "Link has expired or does not exist."}, status=404)
                     return
                 inv_id = token_meta["invoice_id"] if isinstance(token_meta, dict) else token_meta
-                split_pct = token_meta.get("split_percent", 100) if isinstance(token_meta, dict) else 100
-                req_amt = token_meta.get("requested_amount", 0.0) if isinstance(token_meta, dict) else 0.0
+                split_pct = int(token_meta.get("split_percent", 100)) if isinstance(token_meta, dict) else 100
+                if split_pct not in (25, 50, 75, 100):
+                    split_pct = 100
 
                 if inv_id not in INVOICE_STORE:
                     self.send_json({"success": False, "error": "Invoice no longer exists"}, status=404)
@@ -794,13 +859,14 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
                         "flag": "Caregiver Contribution View"
                     })
                 
-                orig_due = float(raw_inv.get("patient_due", 0.0))
-                rem_due = float(raw_inv.get("remaining_patient_due", orig_due))
-                fam_contrib = float(raw_inv.get("family_contributions_total", raw_inv.get("total_captured_amount", 0.0)))
-                contrib_cnt = len(raw_inv.get("captures", []))
-                eff_req = to_money(min(rem_due, req_amt)) if req_amt > 0.0 else rem_due
+                orig_due = to_money(raw_inv.get("patient_due", 0.0))
+                rem_due = to_money(raw_inv.get("remaining_patient_due", orig_due))
+                fam_contrib = to_money(raw_inv.get("family_contributions_total", raw_inv.get("total_captured_amount", 0.0)))
+                contrib_cnt = int(raw_inv.get("family_contributions_count", len(raw_inv.get("captures", []))))
+                eff_req = to_money(max(1.00, min(rem_due, rem_due * (split_pct / 100.0)))) if rem_due > 0.0 else 0.0
                 safe_inv = {
-                    "invoice_id": inv_id,
+                    # Do NOT expose raw CP-XXXX invoice_id to caregiver client; bind to opaque cg_token
+                    "invoice_id": cg_token,
                     "caregiver_token": cg_token,
                     "facility": "Verified Healthcare Facility (Privacy-Minimized)",
                     "date": year_only,
@@ -810,15 +876,16 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
                     "insurance_covered": raw_inv.get("insurance_covered", 0.0),
                     "original_patient_due": orig_due,
                     "patient_due": rem_due,
-                    "verified_due": raw_inv.get("verified_due", 0.0),
+                    "verified_due": rem_due,
                     "disputed_due": 0.0,  # Shield raw clinical disputes from caregiver
                     "remaining_patient_due": rem_due,
                     "family_contributions_total": fam_contrib,
                     "contributions_count": contrib_cnt,
                     "requested_split_percent": split_pct,
+                    "requested_split_amount": eff_req,
                     "requested_amount": eff_req,
-                    "pay_in_4_eligible": raw_inv.get("pay_in_4_eligible", False),
-                    "pay_in_4_installment": raw_inv.get("pay_in_4_installment", 0.0),
+                    "pay_in_4_eligible": (eff_req >= 30.00 and eff_req <= 1500.00),
+                    "pay_in_4_installment": to_money(eff_req / 4.0) if (eff_req >= 30.00 and eff_req <= 1500.00) else eff_req,
                     "status": raw_inv.get("status", "UNPAID"),
                     "hipaa_privacy_mode": True,
                     "privacy_minimized_mode": True,
@@ -834,16 +901,19 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
         if clean_path.startswith("api/invoice/"):
             inv_id = clean_path.replace("api/invoice/", "").split("?")[0]
             query_params = urllib.parse.parse_qs(parsed.query)
-            is_caregiver_mode = query_params.get("mode", [""])[0] == "caregiver"
+            is_caregiver_mode = (query_params.get("mode", [""])[0] == "caregiver") or (inv_id in CAREGIVER_TOKENS)
 
             with LEDGER_LOCK:
+                raw_target = inv_id
+                if inv_id in CAREGIVER_TOKENS:
+                    t_meta = CAREGIVER_TOKENS[inv_id]
+                    inv_id = t_meta["invoice_id"] if isinstance(t_meta, dict) else t_meta
+
                 if inv_id in INVOICE_STORE:
                     raw_inv = INVOICE_STORE[inv_id]
                     if is_caregiver_mode:
-                        # Privacy-Minimized Masking for Family / Caregivers
-                        p_name = raw_inv.get("patient_name", "Patient")
-                        masked_name = p_name[0] + "****** " + (p_name.split()[-1][0] + "****" if len(p_name.split()) > 1 else "")
-                        
+                        raw_date = str(raw_inv.get("date", "2026"))
+                        year_only = raw_date[:4] + "-XX-XX (Privacy-Minimized View)"
                         masked_items = []
                         for idx, it in enumerate(raw_inv.get("items", [])):
                             masked_items.append({
@@ -856,8 +926,12 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
                             })
                         
                         caregiver_inv = copy.deepcopy(raw_inv)
-                        caregiver_inv["patient_name"] = masked_name
+                        caregiver_inv["invoice_id"] = raw_target
+                        caregiver_inv["facility"] = "Verified Healthcare Facility (Privacy-Minimized)"
+                        caregiver_inv["date"] = year_only
+                        caregiver_inv["patient_name"] = "Protected Patient (Privacy-Minimized View)"
                         caregiver_inv["items"] = masked_items
+                        caregiver_inv["disputed_due"] = 0.0
                         caregiver_inv["hipaa_privacy_mode"] = True
                         caregiver_inv["privacy_minimized_mode"] = True
                         caregiver_inv["ai_insights"] = [
@@ -872,10 +946,14 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
             return
 
         if clean_path.startswith("api/hsa-evidence/"):
-            inv_id = clean_path.replace("api/hsa-evidence/", "").split("?")[0]
+            raw_target = clean_path.replace("api/hsa-evidence/", "").split("?")[0]
+            query_params = urllib.parse.parse_qs(parsed.query)
+            is_cg_request = (raw_target in CAREGIVER_TOKENS) or (query_params.get("mode", [""])[0] == "caregiver")
+
             with LEDGER_LOCK:
-                if inv_id in CAREGIVER_TOKENS:
-                    t_meta = CAREGIVER_TOKENS[inv_id]
+                inv_id = raw_target
+                if raw_target in CAREGIVER_TOKENS:
+                    t_meta = CAREGIVER_TOKENS[raw_target]
                     inv_id = t_meta["invoice_id"] if isinstance(t_meta, dict) else t_meta
 
                 inv = INVOICE_STORE.get(inv_id)
@@ -885,25 +963,49 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
 
                 captures = inv.get("captures", [])
                 last_cap = captures[-1] if captures else {}
-                total_paid = float(inv.get("paid_amount", 0.0))
-                patient_due = float(inv.get("patient_due", 0.0))
-                hsa_el = float(inv.get("hsa_eligible_due", patient_due))
-                hsa_rev = float(inv.get("hsa_review_due", 0.0))
+                total_paid = to_money(inv.get("total_captured_amount", inv.get("paid_amount", 0.0)))
+                patient_due = to_money(inv.get("patient_due", 0.0))
+                hsa_el = to_money(inv.get("hsa_eligible_due", patient_due))
+                hsa_rev = to_money(inv.get("hsa_review_due", 0.0))
+                last_order_id = last_cap.get("order_id", inv.get("last_order_id", "ORD-SANDBOX-VERIFIED"))
+
+                if is_cg_request:
+                    ev_facility = "Verified Healthcare Facility (Privacy-Minimized)"
+                    ev_date = str(inv.get("date", "2026"))[:4] + "-XX-XX (Privacy-Minimized View)"
+                    ev_patient = "Protected Patient (Privacy-Minimized View)"
+                    ev_inv_id = raw_target
+                    ev_items = []
+                    for idx, it in enumerate(inv.get("items", [])):
+                        ev_items.append({
+                            "code": f"PRIV-MASK-0{idx+1}",
+                            "desc": "Qualified Healthcare Service (Clinical Details Masked for Privacy)",
+                            "charge": it.get("charge", 0.0),
+                            "insured": it.get("insured", 0.0),
+                            "due": it.get("due", 0.0),
+                            "hsa_status": it.get("hsa_status", "ELIGIBLE")
+                        })
+                else:
+                    ev_facility = inv.get("facility", "Healthcare Provider")
+                    ev_date = inv.get("date", time.strftime("%Y-%m-%d"))
+                    ev_patient = inv.get("patient_name", "Patient")
+                    ev_inv_id = inv_id
+                    ev_items = inv.get("items", [])
 
                 evidence = {
-                    "evidence_id": f"HSA-EV-{inv_id.replace('CP-', '')}",
-                    "invoice_id": inv_id,
+                    "evidence_id": f"HSA-EV-{ev_inv_id.replace('CP-', '').replace('CG-', '')[:10]}",
+                    "invoice_id": ev_inv_id,
                     "issue_timestamp": time.strftime("%Y-%m-%d %H:%M:%S UTC"),
-                    "facility": inv.get("facility", "Healthcare Provider"),
-                    "service_date": inv.get("date", time.strftime("%Y-%m-%d")),
-                    "patient_name": inv.get("patient_name", "Patient"),
+                    "facility": ev_facility,
+                    "service_date": ev_date,
+                    "patient_name": ev_patient,
                     "currency": inv.get("currency", "USD"),
                     "total_patient_due": patient_due,
                     "total_settled_via_paypal": total_paid,
                     "paypal_capture_id": last_cap.get("capture_id", "SANDBOX-SETTLED"),
-                    "paypal_order_id": inv.get("last_order_id", "ORD-VERIFIED"),
+                    "paypal_order_id": last_order_id,
                     "hsa_eligible_amount": hsa_el,
                     "hsa_review_amount": hsa_rev,
+                    "privacy_minimized_mode": is_cg_request,
                     "statutory_reference": "IRC § 213(d) / IRS Publication 502 (Medical and Dental Expenses)",
                     "rules_version": "2026-v1.0-CAREPAY-BENCHMARK",
                     "legal_notice": (
@@ -911,7 +1013,7 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
                         "HSA/FSA eligibility may depend on the item, diagnosis, medical necessity, and your specific plan rules. "
                         "This record is not an IRS-issued or government-endorsed document. Retain original pharmacy/provider records."
                     ),
-                    "items": inv.get("items", [])
+                    "items": ev_items
                 }
                 self.send_json({"success": True, "evidence": evidence})
             return
@@ -1111,15 +1213,28 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
             self.send_json({"success": False, "error": "Invalid request body: object expected"}, status=400)
             return
 
-        invoice_id = str(body.get("invoice_id", "")).strip()
-        
+        raw_id = str(body.get("invoice_id", "")).strip()
+        cg_token = str(body.get("caregiver_token", "")).strip()
+
         with LEDGER_LOCK:
+            cg_meta = None
+            if cg_token and cg_token in CAREGIVER_TOKENS:
+                cg_meta = CAREGIVER_TOKENS[cg_token]
+            elif raw_id in CAREGIVER_TOKENS:
+                cg_token = raw_id
+                cg_meta = CAREGIVER_TOKENS[raw_id]
+
+            if cg_meta is not None:
+                invoice_id = cg_meta["invoice_id"] if isinstance(cg_meta, dict) else cg_meta
+            else:
+                invoice_id = raw_id
+
             # Strict server price authority: invoice MUST exist in authorized INVOICE_STORE!
             if not invoice_id or invoice_id not in INVOICE_STORE:
                 self.send_json({
                     "success": False,
                     "error": "Invoice Not Found",
-                    "message": f"Cannot create order: invoice '{invoice_id}' does not exist in authorized ledger. Client price injection blocked."
+                    "message": f"Cannot create order: invoice '{raw_id}' does not exist in authorized ledger. Client price injection blocked."
                 }, status=404)
                 return
 
@@ -1132,12 +1247,15 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_json({
                     "success": False,
                     "error": "Invoice Already Settled",
-                    "message": f"Invoice '{invoice_id}' has already been paid and settled. Replay payments are blocked."
+                    "message": f"Invoice '{raw_id}' has already been paid and settled. Replay payments are blocked."
                 }, status=400)
                 return
 
             currency = str(record.get("currency", "USD")).strip() or "USD"
             mode = str(body.get("mode", "full")).strip().lower()
+            if cg_meta is not None:
+                # Any caregiver token checkout (including 100% full support) is tracked in the family contribution ledger
+                mode = "family_split"
 
             # Server-enforced amount authority based on payment mode:
             if mode == "verified_only":
@@ -1150,10 +1268,22 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
                     }, status=400)
                     return
             elif mode == "family_split":
-                try:
-                    split_val = float(body.get("split_amount", 0.0))
-                except (ValueError, TypeError):
-                    split_val = 0.0
+                req_pct = body.get("split_percent")
+                if req_pct is None and isinstance(cg_meta, dict):
+                    req_pct = cg_meta.get("split_percent")
+                split_val = None
+                if req_pct is not None:
+                    try:
+                        pct_int = int(req_pct)
+                        if pct_int in (25, 50, 75, 100):
+                            split_val = to_money(max(1.00, min(rem_due, rem_due * (pct_int / 100.0))))
+                    except (ValueError, TypeError):
+                        pass
+                if split_val is None:
+                    try:
+                        split_val = float(body.get("split_amount", 0.0))
+                    except (ValueError, TypeError):
+                        split_val = 0.0
                 if split_val < 1.00 or split_val > rem_due + 0.01:
                     self.send_json({
                         "success": False,
@@ -1161,7 +1291,7 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
                         "message": f"Family split contribution must be between $1.00 and remaining balance of ${rem_due:.2f}."
                     }, status=400)
                     return
-                amount = to_money(split_val)
+                amount = to_money(min(rem_due, split_val))
             else:
                 amount = to_money(rem_due)
 
@@ -1207,7 +1337,7 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
             self.send_json({"success": False, "error": "Invalid request body: object expected"}, status=400)
             return
 
-        invoice_id = str(body.get("invoice_id", "")).strip()
+        raw_id = str(body.get("invoice_id", "")).strip()
         caregiver_email = str(body.get("caregiver_email", "")).strip() or "family@example.com"
         try:
             split_percent = int(body.get("split_percent", 100))
@@ -1217,11 +1347,16 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
             split_percent = 100
 
         with LEDGER_LOCK:
+            invoice_id = raw_id
+            if raw_id in CAREGIVER_TOKENS:
+                t_meta = CAREGIVER_TOKENS[raw_id]
+                invoice_id = t_meta["invoice_id"] if isinstance(t_meta, dict) else t_meta
+
             if not invoice_id or invoice_id not in INVOICE_STORE:
                 self.send_json({
                     "success": False,
                     "error": "Invoice Not Found",
-                    "message": f"Cannot generate caregiver link: invoice '{invoice_id}' does not exist in active ledger."
+                    "message": f"Cannot generate caregiver link: invoice '{raw_id}' does not exist in active ledger."
                 }, status=404)
                 return
 
@@ -1229,7 +1364,7 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
             # Opaque tokenized caregiver bearer link (Privacy-Minimized View)
             cg_token = f"CG-{secrets.token_urlsafe(16)}"
             rem_due = to_money(record.get("remaining_patient_due", record.get("patient_due", 0.0)))
-            req_amount = to_money(max(1.00, rem_due * (split_percent / 100.0))) if rem_due > 0 else 0.0
+            req_amount = to_money(max(1.00, min(rem_due, rem_due * (split_percent / 100.0)))) if rem_due > 0 else 0.0
 
             CAREGIVER_TOKENS[cg_token] = {
                 "invoice_id": invoice_id,
@@ -1252,11 +1387,10 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
                 "patient_due": float(record.get("patient_due", 0.0)),
                 "remaining_patient_due": rem_due,
                 "family_contributions_total": float(record.get("family_contributions_total", record.get("total_captured_amount", 0.0))),
-                "contributions_count": len(record.get("captures", [])),
+                "contributions_count": int(record.get("family_contributions_count", len(record.get("captures", [])))),
                 "verified_due": float(record.get("verified_due", record.get("patient_due", 0.0))),
                 "pay_in_4_eligible": bool(record.get("pay_in_4_eligible", False)),
                 "pay_in_4_installment": float(record.get("pay_in_4_installment", 0.0)),
-                "hipaa_safe_harbor": True,
                 "privacy_minimized_mode": True,
                 "message": f"Caregiver privacy-minimized payment link generated ({split_percent}% contribution: ${req_amount:.2f})."
             })
@@ -1266,22 +1400,30 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
             self.send_json({"success": False, "error": "Invalid request body: object expected"}, status=400)
             return
 
-        invoice_id = str(body.get("invoice_id", "")).strip()
+        raw_id = str(body.get("invoice_id", "")).strip()
         target_item_code = str(body.get("target_item_code", "")).strip()
 
-        # Retrieve record: read-only from INVOICE_STORE, read-only from client draft, or SAMPLE_BILLS
-        # NEVER write client-supplied invoice_data into the authorized INVOICE_STORE!
-        record = None
-        if invoice_id and invoice_id in INVOICE_STORE:
-            record = INVOICE_STORE[invoice_id]
-        elif "invoice_data" in body and isinstance(body["invoice_data"], dict):
-            # Ephemeral read-only draft: client cannot poison INVOICE_STORE
-            record = body["invoice_data"]
-        elif invoice_id in SAMPLE_BILLS:
-            record = SAMPLE_BILLS[invoice_id]
+        is_cg_token = False
+        invoice_id = raw_id
+        with LEDGER_LOCK:
+            if raw_id in CAREGIVER_TOKENS:
+                is_cg_token = True
+                t_meta = CAREGIVER_TOKENS[raw_id]
+                invoice_id = t_meta["invoice_id"] if isinstance(t_meta, dict) else t_meta
+
+            # Retrieve record: read-only from INVOICE_STORE, read-only from client draft, or SAMPLE_BILLS
+            # NEVER write client-supplied invoice_data into the authorized INVOICE_STORE!
+            record = None
+            if invoice_id and invoice_id in INVOICE_STORE:
+                record = INVOICE_STORE[invoice_id]
+            elif "invoice_data" in body and isinstance(body["invoice_data"], dict):
+                # Ephemeral read-only draft: client cannot poison INVOICE_STORE
+                record = body["invoice_data"]
+            elif invoice_id in SAMPLE_BILLS:
+                record = SAMPLE_BILLS[invoice_id]
 
         if not record:
-            self.send_json({"success": False, "error": f"Invoice record not found for reference: {invoice_id}"}, status=404)
+            self.send_json({"success": False, "error": f"Invoice record not found for reference: {raw_id}"}, status=404)
             return
 
         facility = record.get("facility", "Healthcare Provider")
@@ -1290,12 +1432,25 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
         today_str = time.strftime("%B %d, %Y")
 
         # Shield protected identity if requested in privacy-minimized caregiver mode
-        if bool(body.get("is_caregiver") or body.get("hipaa_privacy_mode") or record.get("hipaa_privacy_mode")):
+        is_privacy_masked = bool(is_cg_token or body.get("is_caregiver") or body.get("hipaa_privacy_mode") or record.get("hipaa_privacy_mode") or record.get("privacy_minimized_mode"))
+        if is_privacy_masked:
             patient_name = "Protected Patient (Privacy-Minimized View)"
             facility = "Verified Healthcare Facility (Privacy-Minimized)"
             date_of_service = str(date_of_service)[:4] + "-XX-XX (Privacy-Minimized View)"
         
         items = record.get("items", [])
+        if is_privacy_masked:
+            masked_items = []
+            for idx, it in enumerate(items):
+                masked_items.append({
+                    "code": f"PRIV-MASK-0{idx+1}",
+                    "desc": "Masked Healthcare Clinical Service (Caregiver View)",
+                    "charge": it.get("charge", 0.0),
+                    "insured": it.get("insured", 0.0),
+                    "due": it.get("due", 0.0),
+                    "flag": it.get("flag", "")
+                })
+            items = masked_items
         
         # Pinpoint targeted item code or surprise/disputed items
         disputed_items = []
@@ -1327,22 +1482,21 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
                     cms_rate = float(cms_ref)
                     ratio = it.get('markup_ratio') or (round(c_amt / cms_rate, 2) if cms_rate > 0 else None)
                     ratio_str = f" ({ratio}x billed markup ratio)" if ratio else ""
-                    line += f"\n    CMS Medicare Benchmark Context: ${cms_rate:.2f} national allowable reference rate{ratio_str}"
+                    line += f"\n    Illustrative CMS Reference Value: ${cms_rate:.2f} illustrative Medicare reference value{ratio_str}"
                 dispute_lines.append(line)
             disputed_text = "\n\n".join(dispute_lines)
             scope_notice = (
-                "Upon reviewing this statement with PainFree CarePay AI, the following service item(s) require verification "
-                "under the federal No Surprises Act (Public Law 116-260, 45 CFR Part 149) regarding provider network status, "
-                "recognized amounts, and statutory patient cost-sharing benchmarks:\n\n"
+                "Upon reviewing this statement with PainFree CarePay AI, the following service item(s) are highlighted for patient inquiry "
+                "regarding provider network status, recognized amounts, and cost-sharing calculations (45 CFR Part 149):\n\n"
                 f"{disputed_text}"
             )
         else:
             scope_notice = (
-                "Pursuant to patient rights under federal healthcare regulations and the No Surprises Act, I am requesting "
-                "a comprehensive unbundled itemization of all charges, clinician NPIs, and in-network cost-sharing fee schedules "
+                "I am requesting a comprehensive unbundled itemization of all charges, clinician NPIs, and in-network cost-sharing calculations "
                 "associated with this date of service."
             )
 
+        ref_display_id = raw_id if is_privacy_masked else (invoice_id or 'CP-VERIFIED')
         letter_text = (
             f"DATE: {today_str}\n\n"
             f"TO:\n"
@@ -1350,48 +1504,47 @@ class CarePayHandler(http.server.SimpleHTTPRequestHandler):
             f"{facility}\n\n"
             f"FROM:\n"
             f"{patient_name}\n"
-            f"RE: Formal Itemized Billing Audit & Cost-Sharing Verification Request\n"
-            f"Account / Invoice Reference ID: {invoice_id or 'CP-VERIFIED'}\n"
+            f"RE: Itemized Billing Inquiry & Cost-Sharing Clarification Request\n"
+            f"Account / Invoice Reference ID: {ref_display_id}\n"
             f"Date of Service: {date_of_service}\n\n"
             f"Dear Billing Manager,\n\n"
-            f"I am writing to formally request a detailed audit and clarification of charges on the account referenced above.\n\n"
+            f"I am writing to request an itemized review and clarification of charges on the account referenced above.\n\n"
             f"{scope_notice}\n\n"
-            f"STATEMENT OF INQUIRY UNDER 45 CFR § 149.410 & § 149.420:\n"
+            f"PATIENT INQUIRY QUESTIONS (45 CFR § 149.410 & § 149.420 CONTEXT):\n"
             f"1. Facility & Provider Network Status: Please confirm whether all attending and ancillary clinicians rendering care at your facility were participating in-network providers with my health plan.\n"
-            f"2. Cost-Sharing, Recognized Amount & QPA Methodology Request: If out-of-network clinicians provided services at this in-network facility without valid prior notice and consent, please explain the applicable recognized amount and furnish the specific Qualifying Payment Amount (QPA) methodology (45 CFR § 149.140) used to benchmark patient responsibility, noting that billed charges significantly exceed CMS Medicare allowable reference schedules. Please confirm how my plan's in-network cost-sharing rules (deductible, copay, or coinsurance) were applied. This inquiry is an informational substantiation request under federal law.\n"
-            f"3. Itemized Fee Schedule: Please furnish a fully unbundled billing statement itemizing revenue codes, HCPCS/CPT codes, and National Provider Identifiers (NPI).\n\n"
-            f"REQUESTED ADMINISTRATIVE ACTIONS:\n"
-            f"1. Place a temporary 30-day administrative hold on this account to suspend any automated collections or late fees while this review is conducted.\n"
-            f"2. Issue an updated billing statement reflecting verified in-network cost-sharing calculations.\n\n"
-            f"Please note: As soon as the verified itemized calculation is confirmed, I am prepared to promptly settle the undisputed patient responsibility via PayPal.\n\n"
-            f"Thank you for your prompt assistance and cooperation.\n\n"
+            f"2. Cost-Sharing & QPA Clarification: If out-of-network clinicians provided services at this in-network facility, please explain the applicable recognized amount and how the Qualifying Payment Amount (QPA) under 45 CFR § 149.140 was applied to calculate patient cost-sharing (noting for context that the billed amount exceeds illustrative CMS-style reference values). Please confirm how my plan's deductible, copay, or coinsurance rules were applied.\n"
+            f"3. Itemized Statement: Please furnish an unbundled billing statement itemizing revenue codes, HCPCS/CPT codes, and National Provider Identifiers (NPI).\n\n"
+            f"REQUESTED NEXT STEPS:\n"
+            f"1. Please review this inquiry and let me know if a temporary billing hold is available while these charges are clarified.\n"
+            f"2. Please provide an updated billing statement or explanation of benefits reflecting verified cost-sharing calculations.\n\n"
+            f"Please note: As soon as the verified itemized calculation is confirmed, I am prepared to promptly settle the undisputed patient responsibility.\n\n"
+            f"Thank you for your assistance.\n\n"
             f"Sincerely,\n\n"
             f"_________________________________________\n"
             f"{patient_name}\n"
-            f"Patient / Authorized Healthcare Representative\n\n"
+            f"Patient / Authorized Representative\n\n"
             f"================================================================================\n"
-            f"NOTICE & REGULATORY CLARIFICATION:\n"
-            f"• Informational Draft: This inquiry letter is an AI-generated draft prepared\n"
-            f"  for patient review. It does not constitute formal legal, medical, or tax advice.\n"
-            f"• CMS Benchmark vs. QPA: CMS fee schedule values referenced herein reflect federal\n"
-            f"  Medicare allowable reference rates. Under the federal No Surprises Act, the\n"
-            f"  Qualifying Payment Amount (QPA) represents median in-network contracted rates\n"
-            f"  and must be calculated by your specific health plan or issuer.\n"
+            f"NOTICE & EDUCATIONAL CLARIFICATION:\n"
+            f"• Informational Draft: This inquiry letter is an AI-generated communication draft\n"
+            f"  prepared for patient review. It does not constitute legal, medical, or tax advice.\n"
+            f"• Illustrative Reference vs. QPA: CMS-style values referenced herein are illustrative\n"
+            f"  Medicare reference figures for comparison only. Under the No Surprises Act, the\n"
+            f"  Qualifying Payment Amount (QPA) must be calculated by your health plan or issuer.\n"
             f"================================================================================\n"
         )
 
         self.send_json({
             "success": True,
             "appeal_id": f"APL-{secrets.token_hex(4).upper()}",
-            "invoice_id": invoice_id,
+            "invoice_id": ref_display_id,
             "facility": facility,
             "patient_name": patient_name,
             "target_item_code": target_item_code,
             "letter_text": letter_text,
-            "legal_statute": "US No Surprises Act (45 CFR § 149.410 / § 149.420)",
-            "disclaimer": "AI-generated draft for patient review. Not legal, medical, or tax/financial advice. CMS fee schedule is a Medicare reference benchmark; QPA must be calculated by your plan/issuer under the No Surprises Act.",
+            "legal_statute": "US No Surprises Act Inquiry Context (45 CFR § 149.410 / § 149.420)",
+            "disclaimer": "AI-generated communication draft for patient review. Not legal, medical, or tax/financial advice. CMS-style values are illustrative reference figures; QPA must be calculated by your plan/issuer.",
             "disputed_items_count": len(disputed_items),
-            "message": "Federal billing audit and dispute letter drafted successfully."
+            "message": "Patient billing inquiry draft generated."
         })
 
     def send_json(self, data, status=200):

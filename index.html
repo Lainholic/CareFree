@@ -1545,6 +1545,12 @@
             </div>
           </div>
 
+          <!-- Collaborative Family Care Ledger Bar (Visible in both Patient & Caregiver Views) -->
+          <div id="familyLedgerBar" style="background: rgba(15, 23, 42, 0.65); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; font-size: 11px; display: flex; justify-content: space-between; align-items: center;">
+            <span style="color: #94a3b8;">👨‍👩‍👧 Family Care Ledger:</span>
+            <span>Contributed <strong id="dispFamContributed" style="color: #34d399;">$0.00</strong> • Remaining <strong id="dispFamRemaining" style="color: #38bdf8;">$180.00</strong></span>
+          </div>
+
           <!-- PayPal Smart Payment Button Card -->
           <div class="paypal-btn-area">
             <!-- Official PayPal Smart Buttons SDK Container -->
@@ -1562,10 +1568,6 @@
           <div class="caregiver-card" id="caregiverShareCard">
             <h4>👨‍👩‍👧 Family Split & Caregiver Link</h4>
             <p>Send a privacy-minimized payment link so family members can review and contribute via PayPal or Venmo Sandbox.</p>
-            <div id="familyLedgerBar" style="background: rgba(15, 23, 42, 0.65); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; font-size: 11px; display: flex; justify-content: space-between; align-items: center;">
-              <span style="color: #94a3b8;">Family Care Ledger:</span>
-              <span>Contributed <strong id="dispFamContributed" style="color: #34d399;">$0.00</strong> • Remaining <strong id="dispFamRemaining" style="color: #38bdf8;">$180.00</strong></span>
-            </div>
             <div class="split-amount-presets" id="splitPresetsRow">
               <span class="split-preset-chip active" id="chipSplit100" onclick="setCaregiverSplit('100')">100% Full</span>
               <span class="split-preset-chip" id="chipSplit75" onclick="setCaregiverSplit('75')">75% Share</span>
@@ -1878,12 +1880,33 @@
       document.querySelectorAll('.split-preset-chip').forEach(c => c.classList.remove('active'));
       const activeChip = document.getElementById('chipSplit' + pctStr);
       if (activeChip) activeChip.classList.add('active');
+      updatePricingDisplay();
+    }
+
+    function setHighlightWithAmount(containerEl, prefixText, amountText) {
+      if (!containerEl) return;
+      containerEl.textContent = prefixText;
+      const span = document.createElement('span');
+      span.id = 'dispInstallment';
+      span.textContent = amountText;
+      containerEl.appendChild(span);
     }
 
     function updatePricingDisplay() {
       const isVerifiedOnly = (currentSettleMode === 'verified_only');
-      const baseDue = isVerifiedOnly ? (currentInvoice.verified_due || 150.00) : (currentInvoice.patient_due || 180.00);
-      const dueNum = Number(baseDue);
+      const remDue = (currentInvoice.remaining_patient_due !== undefined && currentInvoice.remaining_patient_due !== null)
+        ? Number(currentInvoice.remaining_patient_due)
+        : ((currentInvoice.patient_due !== undefined && currentInvoice.patient_due !== null) ? Number(currentInvoice.patient_due) : 180.00);
+      const verDue = (currentInvoice.verified_due !== undefined && currentInvoice.verified_due !== null)
+        ? Number(currentInvoice.verified_due)
+        : remDue;
+
+      let dueNum = isVerifiedOnly ? verDue : remDue;
+      if (!isVerifiedOnly && (currentCaregiverSplitPercent < 100 || Boolean(currentInvoice.caregiver_token))) {
+        dueNum = dueNum > 0
+          ? Math.max(1.00, Math.min(dueNum, Number((dueNum * (currentCaregiverSplitPercent / 100)).toFixed(2))))
+          : 0.00;
+      }
 
       document.getElementById('dispDue').textContent = '$' + dueNum.toFixed(2);
 
@@ -1896,17 +1919,19 @@
       const p4Desc = document.querySelector('.pay-in-4-desc');
 
       if (isVerifiedOnly) {
-        if (p4Badge) p4Badge.textContent = "⚖️ DISPUTE HOLD ACTIVE • VERIFIED CHECKOUT";
-        if (p4Highlight) p4Highlight.innerHTML = `Settling Verified Services: <span id="dispInstallment">$${dueNum.toFixed(2)}</span>`;
-        if (p4Desc) p4Desc.textContent = `Disputed balance of $${(currentInvoice.disputed_due || 30.00).toFixed(2)} held under 45 CFR § 149.410. Pay in 4 installment: $${instStr}/bi-weekly.`;
+        if (p4Badge) p4Badge.textContent = "⚖️ INQUIRY HOLD OPTION • UNDISPUTED CHECKOUT";
+        setHighlightWithAmount(p4Highlight, 'Settling Undisputed Services: ', '$' + dueNum.toFixed(2));
+        if (p4Desc) p4Desc.textContent = `Flagged balance of $${Number(currentInvoice.disputed_due || 0).toFixed(2)} held in local demo balance for inquiry. Estimated 4-pay installment: $${instStr}/bi-weekly.`;
       } else {
-        if (p4Badge) p4Badge.textContent = isEligiblePayIn4 ? "PAYPAL PAY IN 4 ELIGIBLE" : "STANDARD PAYPAL CHECKOUT";
-        if (p4Highlight) p4Highlight.innerHTML = isEligiblePayIn4
-          ? `4 Interest-Free Payments of <span id="dispInstallment">$${instStr}</span>`
-          : `Single Payment Balance: <span id="dispInstallment">$${dueNum.toFixed(2)}</span>`;
+        if (p4Badge) p4Badge.textContent = isEligiblePayIn4 ? "PAYPAL PAY IN 4 ILLUSTRATION" : "STANDARD PAYPAL CHECKOUT";
+        if (isEligiblePayIn4) {
+          setHighlightWithAmount(p4Highlight, '4 Estimated Bi-Weekly Payments of ', '$' + instStr);
+        } else {
+          setHighlightWithAmount(p4Highlight, 'Single Checkout Balance: ', '$' + dueNum.toFixed(2));
+        }
         if (p4Desc) p4Desc.textContent = isEligiblePayIn4
-          ? "Split your full medical copay into 4 bi-weekly payments. 0% interest, managed via PayPal Pay Later."
-          : "Transactions under $30.00 or over $1,500 are processed as a single standard checkout.";
+          ? "Estimated 4 bi-weekly payments via PayPal Pay Later. Final eligibility and terms are determined by PayPal at checkout."
+          : "Balances under $30.00 or over $1,500.00 are presented as a single standard PayPal checkout.";
       }
 
       document.getElementById('t1').textContent = '$' + instStr;
@@ -1957,32 +1982,59 @@
       });
     }
 
+    function maskIdentifierHeaderOnCanvas(rawDataUrl, callback) {
+      const img = new Image();
+      img.onload = function() {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width || 800;
+          canvas.height = img.height || 1000;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+          // Client-side privacy minimization: mask top patient/MRN identifier zone on canvas before transmission
+          const maskHeight = Math.max(28, Math.round(canvas.height * 0.08));
+          ctx.fillStyle = '#0f172a';
+          ctx.fillRect(0, 0, canvas.width, maskHeight);
+          ctx.fillStyle = '#38bdf8';
+          ctx.font = 'bold ' + Math.max(11, Math.round(maskHeight * 0.35)) + 'px sans-serif';
+          ctx.fillText('CLIENT-SIDE PRIVACY MASKED HEADER (DIRECT IDENTIFIERS REDACTED)', 12, Math.round(maskHeight * 0.65));
+          callback(canvas.toDataURL('image/jpeg', 0.92));
+        } catch (err) {
+          callback(rawDataUrl);
+        }
+      };
+      img.onerror = function() { callback(rawDataUrl); };
+      img.src = rawDataUrl;
+    }
+
     function handleFileUpload(event) {
       const file = event.target.files[0];
       if (!file) return;
 
       const reader = new FileReader();
       reader.onload = function(e) {
-        document.getElementById('billPreview').src = e.target.result;
-        document.getElementById('scanLaser').style.display = 'block';
+        maskIdentifierHeaderOnCanvas(e.target.result, function(maskedDataUrl) {
+          document.getElementById('billPreview').src = maskedDataUrl;
+          document.getElementById('scanLaser').style.display = 'block';
 
-        fetch('/api/analyze', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ image_base64: e.target.result })
-        })
-        .then(res => res.json())
-        .then(res => {
-          document.getElementById('scanLaser').style.display = 'none';
-          if (res.success && res.data) {
-            renderBillData(res.data);
-          } else {
-            alert("Analysis Notice: " + (res.message || res.error || "Could not extract itemized lines."));
-          }
-        })
-        .catch(err => {
-          document.getElementById('scanLaser').style.display = 'none';
-          console.error("Upload error:", err);
+          fetch('/api/analyze', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ image_base64: maskedDataUrl })
+          })
+          .then(res => res.json())
+          .then(res => {
+            document.getElementById('scanLaser').style.display = 'none';
+            if (res.success && res.data) {
+              renderBillData(res.data);
+            } else {
+              alert("Analysis Notice: " + (res.message || res.error || "Could not extract itemized lines."));
+            }
+          })
+          .catch(err => {
+            document.getElementById('scanLaser').style.display = 'none';
+            console.error("Upload error:", err);
+          });
         });
       };
       reader.readAsDataURL(file);
@@ -2083,10 +2135,10 @@
             const ratio = item.markup_ratio || (Number(item.charge) / Number(item.cms_reference_fee)).toFixed(1);
             const cmsPill = document.createElement('div');
             cmsPill.className = 'cms-benchmark-pill';
-            cmsPill.title = `CMS 2026 Medicare National Allowable Benchmark: $${cmsFee}. Billed charge is ${ratio}x of Medicare allowable.`;
+            cmsPill.title = `Illustrative CMS-style reference value: $${cmsFee} (${ratio}x billed ratio for patient review).`;
             
             const cmsSpan = document.createElement('span');
-            cmsSpan.textContent = `🏛️ CMS: $${cmsFee} `;
+            cmsSpan.textContent = `🏛️ CMS Ref: $${cmsFee} `;
             cmsPill.appendChild(cmsSpan);
 
             const ratioBadge = document.createElement('span');
@@ -2212,7 +2264,7 @@
         } else {
           fallbackCopyText(data.share_url);
         }
-        alert(`🛡️ Family Caregiver Payment Link Generated!\n\nSent to: ${email}\nPrivacy-Minimized Token URL: ${data.share_url}\n\n(Client-side privacy masking active • Copied to clipboard!)`);
+        alert(`🛡️ Family Caregiver Payment Link Generated!\n\nPrepared for: ${email}\nPrivacy-Minimized Token URL: ${data.share_url}\n\n(Local demo URL copied to clipboard — share with family member to review and contribute!)`);
       })
       .catch(err => {
         alert("Notice: " + err.message);
@@ -2432,21 +2484,31 @@
             label: 'paypal'
           },
           createOrder: function(data, actions) {
-            let activeAmt = (currentSettleMode === 'verified_only')
-              ? (currentInvoice.verified_due || 150.00)
-              : (currentInvoice.remaining_patient_due || currentInvoice.patient_due || 180.00);
+            const remDue = (currentInvoice.remaining_patient_due !== undefined && currentInvoice.remaining_patient_due !== null)
+              ? Number(currentInvoice.remaining_patient_due)
+              : ((currentInvoice.patient_due !== undefined && currentInvoice.patient_due !== null) ? Number(currentInvoice.patient_due) : 180.00);
+            const verDue = (currentInvoice.verified_due !== undefined && currentInvoice.verified_due !== null)
+              ? Number(currentInvoice.verified_due)
+              : remDue;
+
+            let activeAmt = (currentSettleMode === 'verified_only') ? verDue : remDue;
             let reqMode = currentSettleMode;
             let splitAmt = undefined;
+            const isCaregiverFlow = Boolean(currentInvoice.caregiver_token);
 
-            if (currentCaregiverSplitPercent < 100) {
+            if (isCaregiverFlow || currentCaregiverSplitPercent < 100) {
               reqMode = 'family_split';
-              splitAmt = Math.max(1.00, Number((activeAmt * (currentCaregiverSplitPercent / 100)).toFixed(2)));
+              splitAmt = activeAmt > 0
+                ? Math.max(1.00, Math.min(activeAmt, Number((activeAmt * (currentCaregiverSplitPercent / 100)).toFixed(2))))
+                : 0.00;
               activeAmt = splitAmt;
             }
 
             const payload = {
               invoice_id: currentInvoice.invoice_id,
+              caregiver_token: currentInvoice.caregiver_token || "",
               mode: reqMode,
+              split_percent: currentCaregiverSplitPercent,
               amount: activeAmt
             };
             if (splitAmt !== undefined) {
@@ -2479,16 +2541,16 @@
               }
               const capturedAmt = Number(captureData.captured_amount) || 0;
               const isVerifiedOnly = (currentSettleMode === 'verified_only');
-              const disputedAmt = Number(currentInvoice.disputed_due || 30.00);
+              const disputedAmt = Number(currentInvoice.disputed_due || 0.00);
 
               if (isVerifiedOnly) {
-                document.getElementById('modalTitle').textContent = "⚖️ Verified Services Settled!";
-                document.getElementById('modalDesc').textContent = `Authorized copay of $${capturedAmt.toFixed(2)} captured via PayPal. Disputed balance of $${disputedAmt.toFixed(2)} is formally placed on administrative dispute hold under 45 CFR § 149.410 (Draft Pending Facility Adjudication).`;
-                document.getElementById('modalPaid').textContent = `$${capturedAmt.toFixed(2)} (Verified Portion Settled)`;
+                document.getElementById('modalTitle').textContent = "⚖️ Undisputed Services Settled!";
+                document.getElementById('modalDesc').textContent = `Authorized payment of $${capturedAmt.toFixed(2)} captured via PayPal Sandbox. Flagged balance of $${disputedAmt.toFixed(2)} remains held in local demo balance while your inquiry draft is reviewed.`;
+                document.getElementById('modalPaid').textContent = `$${capturedAmt.toFixed(2)} (Undisputed Portion Settled)`;
               } else {
-                document.getElementById('modalTitle').textContent = "PayPal Payment Completed!";
-                document.getElementById('modalDesc').textContent = `Authorized copay of $${capturedAmt.toFixed(2)} settled via PayPal Sandbox Orders v2 (Eligible for 4 interest-free payments via PayPal Pay Later).`;
-                document.getElementById('modalPaid').textContent = `$${capturedAmt.toFixed(2)} (Copay Settled)`;
+                document.getElementById('modalTitle').textContent = "PayPal Sandbox Payment Completed!";
+                document.getElementById('modalDesc').textContent = `Authorized payment of $${capturedAmt.toFixed(2)} captured via PayPal Sandbox Orders v2.`;
+                document.getElementById('modalPaid').textContent = `$${capturedAmt.toFixed(2)} (Sandbox Capture Settled)`;
               }
 
               document.getElementById('modalTxId').textContent = captureData.capture_id;

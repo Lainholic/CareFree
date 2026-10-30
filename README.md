@@ -24,9 +24,9 @@ The US out-of-pocket healthcare market exceeds **$490 Billion annually**, yet me
 
 ---
 
-## 🔒 Privacy-Minimized Client Prototype & Architecture
+## 🔒 Privacy-Minimized Prototype & Tokenized Caregiver Architecture
 
-The prototype demonstrates **client-side masking of selected direct identifiers** (such as patient names) on the client canvas before transmission. Masking in this prototype may not remove all personal or health information; reviewers should use the included verified sample data for evaluation. This demonstration is an exploration of client-side privacy minimization and is not a formal determination of de-identification or HIPAA compliance.
+The prototype combines **client-side canvas header masking** (`maskIdentifierHeaderOnCanvas` in `index.html`, which redacts the top patient/MRN header zone of uploaded bill images on an HTML5 `<canvas>` before upload) with **server-side tokenized caregiver projection** (`/api/caregiver-invoice/<cg_token>` and `/api/hsa-evidence/<cg_token>`, which replace patient names, facility names, exact dates, and CPT/NDC codes with masked caregiver-view placeholders and opaque `CG-XXXX` tokens). Masking in this prototype may not remove all personal or health information; reviewers should use the included verified sample data for evaluation. This demonstration is an exploration of privacy minimization and is not a formal determination of de-identification or HIPAA compliance.
 
 ```mermaid
 flowchart TD
